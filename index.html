@@ -740,6 +740,26 @@ const SM = new SoundManager();
             );
         }
 
+// --- 資源下載與檢驗工具函數 ---
+const preloadImage = (src) => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve({ status: 'success', src });
+        img.onerror = () => {
+            console.warn(`圖片載入失敗，略過等待: ${src}`);
+            resolve({ status: 'error', src }); // 即使失敗也 resolve，避免卡死在 Loading 畫面
+        };
+    });
+};
+
+const checkFontsReady = () => {
+    if ('fonts' in document) {
+        return document.fonts.ready;
+    }
+    return Promise.resolve();
+};
+
         function App() {
             const [currentPage, setCurrentPage] = useState('start'); 
             const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
@@ -756,33 +776,77 @@ const SM = new SoundManager();
 
             const touchStartX = useRef(0);
             const touchEndX = useRef(0);
+	// 補上 triggerToast 處理邏輯
+	const triggerToast = (msg) => {
+   		 setToastMessage(msg);
+   		 setTimeout(() => {
+        	setToastMessage('');
+   		 }, 3000); // 3秒後自動消失，時間可依需求調整
+	};
 
-            useEffect(() => {
-                const handleContextMenu = (e) => e.preventDefault();
-                window.addEventListener('contextmenu', handleContextMenu);
-                return () => window.removeEventListener('contextmenu', handleContextMenu);
-            }, []);
+// 1. 點擊開始按鈕，只負責觸發音效並切換到 loading 狀態
+    const startGame = () => {
+        if (window.ytPlayer && window.ytPlayer.playVideo) {
+            window.ytPlayer.playVideo();
+        }
+        if (window.SM) {
+            window.SM.startAmbient();
+            window.SM.playSFX('click', 0.8);
+        }
+        setCurrentPage('loading'); // 進入 Loading 頁面，交給後續的 useEffect 處理下載
+    };
 
-            const triggerToast = (msg) => {
-                setToastMessage(msg);
-                setTimeout(() => setToastMessage(''), 3000);
+    // 2. 核心：當進入 Loading 頁面時，執行嚴格的資源下載與檢查
+    useEffect(() => {
+const loadAllAssets = async () => {
+        // 現在這裡可以安全地讀取到 poems
+        const poemImages = poems
+            .filter(p => p.bgImage && p.bgImage.trim() !== "")
+            .map(p => p.bgImage);
+
+        if (currentPage === 'loading') {
+                loadAllAssets();
+                console.log("開始驗證與下載遊戲資源...");
+                
+                // 設定最少顯示時間 (1.5秒)，確保視覺體驗平滑
+                const minTimePromise = new Promise(resolve => setTimeout(resolve, 1500));
+                
+    
+    // 2. 合併基礎圖片與篇章圖片
+    const imagesToLoad = [
+        './Game.png',
+        './Loading.png',
+        ...poemImages // 使用展開運算子直接加入所有篇章圖片
+    ];
+
+const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
+
+                // [任務 2] 確保 Google 字體完全載入
+                const fontPromise = checkFontsReady();
+
+                // [任務 3] 檢驗 LocalStorage 讀寫狀態
+                const storagePromise = new Promise((resolve) => {
+                    try {
+                        const testKey = '__shijing_test__';
+                        window.localStorage.setItem(testKey, 'ok');
+                        window.localStorage.removeItem(testKey);
+                        console.log("LocalStorage 讀寫狀態驗證：正常");
+                    } catch (e) {
+                        console.warn("LocalStorage 目前處於受限模式 (隱私瀏覽器/禁用 Cookie)：", e);
+                    }
+                    resolve();
+                });
+
+// 並行等待所有任務與時間完成
+                await Promise.all([imagePromise, fontPromise, storagePromise, minTimePromise]);
+                
+                console.log("所有資源與數據準備就緒，進入遊戲主畫面！");
+                setCurrentPage('home');
             };
 
-const startGame = () => {
-    // 1. 點擊熱區瞬間，觸發 YouTube 背景音樂
-    if (window.ytPlayer && window.ytPlayer.playVideo) {
-        window.ytPlayer.playVideo();
-    }
-    // 2. 觸發環境音效（微風水聲等）
-    if (window.SM) {
-        window.SM.startAmbient();
-        window.SM.playSFX('click', 0.8); // 播放點擊音效
-    }
-    
-    // 3. 轉場至 Loading 頁面
-    setCurrentPage('loading');
-    setTimeout(() => setCurrentPage('home'), 2200);
-};
+            loadAllAssets();
+        }
+    }, [currentPage]);
 
             const openPoem = (id) => {
                 if (unlockedPoems.includes(id)) {
@@ -833,12 +897,12 @@ const startGame = () => {
 
             if (currentPage === 'start') {
                 return (
-                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./Start.png')" }}>
+                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./Start.png')" }}>
                        {/* 隱藏式熱區按鈕：透明、無邊框，透過 absolute 覆蓋在 Start.png 的按鈕位置上 */}
                        <button 
                         onClick={startGame}
                         aria-label="開始遊戲"
-                        className="absolute bottom-[50%] left-1/2 -translate-x-1/2 w-[60%] h-[12%] bg-red-500/50 border-none outline-none cursor-pointer clickable-hotspot z-20"
+                        className="absolute bottom-[45%] left-1/2 -translate-x-1/2 w-[30%] h-[12%] bg-red-500/50 border-none outline-none cursor-pointer clickable-hotspot z-20"
                         style={{ WebkitTapHighlightColor: 'transparent' }}
                         />
                     </div>
@@ -847,7 +911,7 @@ const startGame = () => {
 
             if (currentPage === 'loading') {
                 return (
-                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./Loading.png')" }}>
+                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./Loading.png')" }}>
                         <div className="absolute top-1/4 flex flex-col items-center z-10">
                             <div className="relative w-28 h-28 flex items-center justify-center mt-20">
                                 <div className="absolute inset-0 border-4 border-gray-800 rounded-full border-t-transparent border-l-transparent animate-spin-slow opacity-85" style={{ filter: 'blur(1px)' }}></div>
@@ -861,7 +925,7 @@ const startGame = () => {
             if (currentPage === 'home') {
                 const cardFonts = getCardFontClasses();
                 return (
-                    <div className="app-container bg-[#0f0e0c] flex flex-col justify-between animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
                         <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "url('./Game.png')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
                         
                         <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
@@ -1003,6 +1067,37 @@ const startGame = () => {
                                             <div className="flex gap-2.5">{['sm', 'md', 'lg'].map(sz => <button key={sz} onClick={() => setFontSize(sz)} className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}>{sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}</button>)}</div>
                                         </div>
                                     </div>
+<div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
+    {!confirmReset ? (
+        <button 
+            className="w-full py-1.5 rounded text-xs text-red-400 border border-red-900/50 hover:bg-red-950/30 tracking-widest"
+            onClick={() => setConfirmReset(true)}
+        >
+            重置遊戲進度
+        </button>
+    ) : (
+        <div className="flex gap-2">
+            <button 
+                className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white tracking-wider font-bold"
+                onClick={() => {
+                    setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); // 恢復預設章節
+                    setConfirmReset(false);
+                    setShowSettings(false);
+                    triggerToast("🔄 已重置所有探索進度");
+                }}
+            >
+                確定重置
+            </button>
+            <button 
+                className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300 tracking-wider"
+                onClick={() => setConfirmReset(false)}
+            >
+                取消
+            </button>
+        </div>
+    )}
+    <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
+</div>
                                     <div className="flex flex-col gap-3">
                                         <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
                                     </div>
@@ -1124,6 +1219,8 @@ const startGame = () => {
         // 啟動 React
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+
+
     </script>
 </body>
 </html>
