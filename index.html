@@ -90,6 +90,40 @@
         .animate-fade-in { animation: fade-in 0.8s ease-in-out forwards; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .fullText { user-select: text !important; -webkit-user-select: text !important; cursor: text; }
+/* 最外層容器，確保在桌面版置中 */
+.viewport-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--bg-dark, #121212); /* 深色底色 */
+  overflow: hidden;
+  position: relative;
+}
+
+/* 遊戲主畫面容器 */
+.game-frame {
+  height: 100vh;
+  max-width: 100%;
+  aspect-ratio: 9 / 16; /* 根據 start.png 實際比例調整 */
+  position: relative;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+.viewport-container::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle at 50% 50%, rgba(35, 48, 60, 0.4), transparent 60%);
+  animation: ambientBreathing 12s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes ambientBreathing {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.3; }
+  100% { transform: translate(2%, 3%) scale(1.05); opacity: 0.6; }
+}
     </style>
 </head>
 <body>
@@ -561,6 +595,105 @@ const POEMS = [
   }
 ];
 
+// 當 start.png 畫面載入完成後，立刻開始後台下載
+window.addEventListener('DOMContentLoaded', () => {
+  preloadAssets();
+  preloadFonts();
+});
+
+function preloadAssets() {
+  const imagesToPreload = [
+    'loading.png',
+    'game.png', 
+    bgImage,
+    // ...其他遊戲介面與印章 PNG
+  ];
+
+  imagesToPreload.forEach(src => {
+    const img = new Image();
+    img.src = src;
+  });
+}
+
+function preloadFonts() {
+  // 方法 A：採用 Web Font Loader 或 native Font Loading API
+  if ('fonts' in document) {
+    // 提前請求下載並解析字體，不需要等到進入閱讀頁面才載入
+    document.fonts.load('16px "YourCustomFontName"').then(() => {
+      console.log('字體已在後台下載完畢');
+    });
+  }
+
+  // 方法 B（備用兼容方案）：在頁面放入一個透明不可見的元素使用該字體
+  const hiddenText = document.createElement('div');
+  hiddenText.style.fontFamily = 'YourCustomFontName';
+  hiddenText.style.position = 'absolute';
+  hiddenText.style.opacity = '0';
+  hiddenText.style.pointerEvents = 'none';
+  hiddenText.innerText = '預載字體';
+  document.body.appendChild(hiddenText);
+}
+
+        let ytPlayer;
+function onYouTubeIframeAPIReady() {
+  ytPlayer = new YT.Player('yt-player', {
+    height: '0',
+    width: '0',
+    videoId: '11pvOw2DZ58', // 墨韵：高山流水遇知音
+    playerVars: {
+      'autoplay': 0,
+      'loop': 1,
+      'playlist': '11pvOw2DZ58'
+    }
+  });
+}
+
+// 綁定隱藏式熱區按鈕
+document.getElementById('startHotspotBtn').addEventListener('click', () => {
+  // 1. 觸發 YouTube 背景音樂
+  if (ytPlayer && ytPlayer.playVideo) {
+    ytPlayer.playVideo();
+  }
+  
+  // 2. 觸發環境音效初始化
+  initSoundEffects();
+  
+  // 3. 轉場至 loading.png 或遊戲頁面...
+});
+        class SoundManager {
+  constructor() {
+    this.sfx = {
+      stamp: new Audio('assets/audio/stamp.mp3'),
+      pageTurn: new Audio('assets/audio/paper-turn.mp3'),
+      click: new Audio('assets/audio/jade-click.mp3')
+    };
+    
+    // 設定環境背景風水聲 (循環播放)
+    this.ambientWind = new Audio('assets/audio/ambient-wind.mp3');
+    this.ambientWind.loop = true;
+    this.ambientWind.volume = 0.2; // 低音量不搶古琴風采
+  }
+
+  playSFX(name, volume = 0.8) {
+    if (this.sfx[name]) {
+      // 複製音效實體，確保連續快速點擊（如重試或快速蓋章）時不會互相截斷
+      const soundClone = this.sfx[name].cloneNode();
+      soundClone.volume = volume;
+      soundClone.play().catch(e => console.log('音效播放受限:', e));
+    }
+  }
+
+  startAmbient() {
+    this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
+  }
+}
+
+// 實例化並在遊戲內部調用
+const SM = new SoundManager();
+
+// 例如：蓋章成功瞬間調用
+// SM.playSFX('stamp', 1.0);
+        
         function useLocalStorage(key, initialValue) {
             const [storedValue, setStoredValue] = useState(() => {
                 try {
@@ -704,6 +837,7 @@ const POEMS = [
                         <div className="absolute inset-0 bg-black/10 backdrop-blur-[0.5px]"></div>
                         <div className="relative z-10 flex flex-col items-center w-full"><div className="h-[50dvh]"></div><StartButton onClick={startGame} /></div>
                     </div>
+                    <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;"></div>
                 );
             }
 
@@ -727,7 +861,7 @@ const POEMS = [
                         <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "url('./Game.png')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
                         
                         <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-                            <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">詩境遊<span className="text-[10px] text-red-800 ml-1 font-bold">印</span></h1>
+                            <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
                             <div className="text-[10px] text-gray-500 tracking-widest uppercase">{homeTab === 'game' ? '探索篇章' : '典藏閱讀'}</div>
                         </header>
 
