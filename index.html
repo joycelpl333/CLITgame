@@ -128,7 +128,7 @@
 </head>
 <body>
     <div id="root"></div>
-
+    <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;"></div>
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
 
@@ -648,19 +648,8 @@ function onYouTubeIframeAPIReady() {
   });
 }
 
-// 綁定隱藏式熱區按鈕
-document.getElementById('startHotspotBtn').addEventListener('click', () => {
-  // 1. 觸發 YouTube 背景音樂
-  if (ytPlayer && ytPlayer.playVideo) {
-    ytPlayer.playVideo();
-  }
-  
-  // 2. 觸發環境音效初始化
-  initSoundEffects();
-  
-  // 3. 轉場至 loading.png 或遊戲頁面...
-});
-        class SoundManager {
+
+ class SoundManager {
   constructor() {
     this.sfx = {
       stamp: new Audio('assets/audio/stamp.mp3'),
@@ -779,10 +768,21 @@ const SM = new SoundManager();
                 setTimeout(() => setToastMessage(''), 3000);
             };
 
-            const startGame = () => {
-                setCurrentPage('loading');
-                setTimeout(() => setCurrentPage('home'), 2200);
-            };
+const startGame = () => {
+    // 1. 點擊熱區瞬間，觸發 YouTube 背景音樂
+    if (window.ytPlayer && window.ytPlayer.playVideo) {
+        window.ytPlayer.playVideo();
+    }
+    // 2. 觸發環境音效（微風水聲等）
+    if (window.SM) {
+        window.SM.startAmbient();
+        window.SM.playSFX('click', 0.8); // 播放點擊音效
+    }
+    
+    // 3. 轉場至 Loading 頁面
+    setCurrentPage('loading');
+    setTimeout(() => setCurrentPage('home'), 2200);
+};
 
             const openPoem = (id) => {
                 if (unlockedPoems.includes(id)) {
@@ -833,11 +833,15 @@ const SM = new SoundManager();
 
             if (currentPage === 'start') {
                 return (
-                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center animate-fade-in" style={{ backgroundImage: "url('./Start.png')" }}>
-                        <div className="absolute inset-0 bg-black/10 backdrop-blur-[0.5px]"></div>
-                        <div className="relative z-10 flex flex-col items-center w-full"><div className="h-[50dvh]"></div><StartButton onClick={startGame} /></div>
+                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./Start.png')" }}>
+                       {/* 隱藏式熱區按鈕：透明、無邊框，透過 absolute 覆蓋在 Start.png 的按鈕位置上 */}
+                       <button 
+                        onClick={startGame}
+                        aria-label="開始遊戲"
+                        className="absolute bottom-[50%] left-1/2 -translate-x-1/2 w-[60%] h-[12%] bg-red-500/50 border-none outline-none cursor-pointer clickable-hotspot z-20"
+                        style={{ -webkit-tap-highlight-color: 'transparent' }}
+                        />
                     </div>
-                    <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;"></div>
                 );
             }
 
