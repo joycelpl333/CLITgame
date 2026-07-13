@@ -1,1390 +1,991 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Lock, Unlock, ChevronLeft, CheckCircle2, BookOpen, Settings, Eye, EyeOff, Heart, Star, Award } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>詩境遊 - 文學沉浸式學習</title>
+    
+    <!-- 引入 Tailwind CSS 進行國風排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 與 ReactDOM 核心 -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- 引入 Babel 用於在瀏覽器中即時編譯 JSX 語法 -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 引入 FontAwesome 圖示庫 (替代原本的 Lucide 解決編譯問題) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- 引入 Google Fonts 中文古典字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+        html, body, #root {
+            height: 100dvh;
+            margin: 0; padding: 0;
+            background-color: #0d0c0a;
+            color: #e0d5ba;
+            font-family: 'Noto Serif TC', serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none; 
+        }
+        .app-container {
+            height: 100%; width: 100%;
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        img { user-drag: none; -webkit-user-drag: none; pointer-events: none; }
+        button, .clickable-hotspot { pointer-events: auto; }
+        
+        /* 國風按鈕與特效 */
+        .start-btn {
+            font-size: 15px; padding: 13px 44px; border-radius: 12px;
+            border: 1px solid rgba(255, 215, 120, 0.55);
+            background: rgba(10, 10, 8, 0.45); color: #f5d38a;
+            position: relative; overflow: hidden;
+            transition: transform 0.1s ease-in-out;
+            letter-spacing: 0.5em; text-indent: 0.5em; 
+            box-shadow: 0 0 25px rgba(255, 215, 120, 0.1);
+        }
+        .start-btn.pressed { transform: scale(0.92); }
+        .custom-ripple {
+            position: absolute; width: 20px; height: 20px;
+            background: rgba(255, 215, 120, 0.45); border-radius: 50%;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            pointer-events: none;
+            animation: custom-ripple-expand 0.6s ease-out forwards;
+        }
+        @keyframes custom-ripple-expand {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(12); opacity: 0; }
+        }
+        .ink-button { background: rgba(13, 12, 10, 0.9); border: 1px solid #c9a76b; color: #e0d5ba; transition: all 0.3s ease; }
+        .ink-button:active { transform: scale(0.95); }
+        
+        /* 動畫宣告 */
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 4s linear infinite; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(201, 167, 107, 0.3); border-color: rgba(201, 167, 107, 0.2); }
+            50% { box-shadow: 0 0 18px 8px rgba(201, 167, 107, 0.7); border-color: rgba(201, 167, 107, 0.9); }
+        }
+        .hint-pulse { animation: pulse-glow 2s infinite; }
+        @keyframes ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3.5); opacity: 0; } }
+        .ripple-effect { animation: ripple 0.6s ease-out forwards; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.8s ease-in-out forwards; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
 
 // --- 文學篇章資料庫 (香港 DSE 中國文學指定篇章全收錄 28 篇) ---
 const POEMS = [
   {
-    id: 'jianjia',
-    title: '蒹葭 (秦風)',
-    author: '詩經',
-    bgImage: 'https://images.unsplash.com/photo-1629851777086-64ebbf34c311?q=80&w=1000&auto=format&fit=crop',
+    id: "jianjia",
+    title: "秦風‧蒹葭",
+    author: "詩經",
+    bgImage: "./蒹葭.png",
     fullText: [
-      "蒹葭蒼蒼，白露為霜。所謂伊人，在水一方。",
-      "溯洄從之，道阻且長。溯游從之，宛在水中央。"
+      "蒹葭蒼蒼，白露為霜。所謂伊人，在水一方。溯洄從之，道阻且長。溯游從之，宛在水中央。",
+      "蒹葭萋萋，白露未晞。所謂伊人，在水之湄。溯洄從之，道阻且躋。溯游從之，宛在水中坻。",
+      "蒹葭采采，白露未已。所謂伊人，在水之涘。溯洄從之，道阻且右。溯游從之，宛在水中沚。"
     ],
     hotspots: [
-      { id: 'reed', label: '蒹葭蒼蒼 (蘆葦)', x: 20, y: 70 },
-      { id: 'water', label: '在水一方', x: 60, y: 55 }
-    ],
-    ambience: '秋風拂過蘆葦與潺潺水聲'
+      { id: "reed", label: "蒹葭蒼蒼", x: 25, y: 75 },
+      { id: "frost", label: "白露為霜", x: 70, y: 80 },
+      { id: "lady", label: "所謂伊人，在水一方", x: 50, y: 40 }
+    ]
   },
   {
-    id: 'shejiang',
-    title: '涉江 (九章)',
-    author: '屈原 (楚辭)',
-    bgImage: 'https://images.unsplash.com/photo-1544835619-38b444b74a38?q=80&w=1000&auto=format&fit=crop',
+    id: "shejiang",
+    title: "楚辭‧九章‧涉江",
+    author: "楚辭",
+    bgImage: "./涉江.png",
     fullText: [
-      "余幼好此奇服兮，年既老而不衰。",
-      "帶長顑之陸離兮，冠切雲之崔嵬。"
+      "余幼好此奇服兮，年既老而不衰。帶長鋏之陸離兮，冠切雲之崔嵬。被明月兮珮寶璐。世溷濁而莫余知兮，吾方高馳而不顧。駕青虯兮驂白螭，吾與重華遊兮瑤之圃。登崑崙兮食玉英，與天地兮同壽，與日月兮同光。哀南夷之莫吾知兮，旦余濟乎江湘。",
+      "乘鄂渚而反顧兮，欸秋冬之緒風。步余馬兮山皋，邸余車兮方林。乘舲船余上沅兮，齊吳榜以擊汰。船容與而不進兮，淹回水而疑滯。朝發枉陼兮，夕宿辰陽。苟余心其端直兮，雖僻遠之何傷。",
+      "入漵浦余儃佪兮，迷不知吾所如。深林杳以冥冥兮，猨狖之所居。山峻高以蔽日兮，下幽晦以多雨。霰雪紛其無垠兮，雲霏霏而承宇。哀吾生之無樂兮，幽獨處乎山中。吾不能變心而從俗兮，固將愁苦而終窮。",
+      "接輿髡首兮，桑扈臝行。忠不必用兮，賢不必以。伍子逢殃兮，比干菹醢。與前世而皆然兮，吾又何怨乎今之人！余將董道而不豫兮，固將重昏而終身！",
+      "亂曰：鸞鳥鳳皇，日以遠兮。燕雀烏鵲，巢堂壇兮。露申辛夷，死林薄兮。腥臊並御，芳不得薄兮。陰陽易位，時不當兮。懷信侘傺，忽乎吾將行兮！"
     ],
     hotspots: [
-      { id: 'boat', label: '乘舲船余上沅兮 (孤舟)', x: 45, y: 65 }
-    ],
-    ambience: '江水滔滔與孤舟搖櫓聲'
+      { id: "sword", label: "帶長鋏之陸離兮", x: 35, y: 60 },
+      { id: "hat", label: "冠切雲之崔嵬", x: 50, y: 20 },
+      { id: "birds", label: "鸞鳥鳳皇，日以遠兮", x: 65, y: 35 }
+    ]
   },
   {
-    id: 'qihuan',
-    title: '齊桓晉文之事章',
-    author: '孟子',
-    bgImage: 'https://images.unsplash.com/photo-1599839619722-39751411ea63?q=80&w=1000&auto=format&fit=crop',
+    id: "qihuan",
+    title: "齊桓晉文之事章",
+    author: "孟子",
+    bgImage: "./齊桓晉文之事章.png",
     fullText: [
-      "齊宣王問曰：「齊桓、晉文之事，可得聞乎？」",
-      "孟子對曰：「仲尼之徒無道桓文之事者，是以後世無傳焉，臣未之聞也。無以，則王乎？」",
-      "物皆然，心爲甚。王請度之。"
+      "齊宣王問曰：「齊桓、晉文之事，可得聞乎？」孟子對曰：「仲尼之徒，無道桓、文之事者，是以後世無傳焉，臣未之聞也。無以，則王乎？」曰：「德何如則可以王矣？」曰：「保民而王，莫之能禦也。」曰：「若寡人者，可以保民乎哉？」曰：「可。」曰：「何由知吾可也？」曰：「臣聞之胡齕曰：『王坐於堂上，有牽牛而過堂下者。王見之，曰：「牛何之？」對曰：「將以釁鐘。」王曰：「舍之！吾不忍其觳觫，若無罪而就死地。」對曰：「然則廢釁鐘與？」曰：「何可廢也？以羊易之。」』不識有諸？」曰：「有之。」曰：「是心足以王矣。百姓皆以王為愛也，臣固知王之不忍也。」",
+      "王曰：「然，誠有百姓者。齊國雖褊小，吾何愛一牛？即不忍其觳觫，若無罪而就死地，故以羊易之也。」曰：「王無異於百姓之以王為愛也。以小易大，彼惡知之？王若隱其無罪而就死地，則牛羊何擇焉？」王笑曰：「是誠何心哉！我非愛其財而易之以羊也，宜乎百姓之謂我愛也。」曰：「無傷也，是乃仁術也！見牛未見羊也。君子之於禽獸也：見其生，不忍見其死；聞其聲，不忍食其肉。是以君子遠庖廚也。」",
+      "王說曰：「《詩》雲：『他人有心，予忖度之。』夫子之謂也。夫我乃行之，反而求之，不得吾心；夫子言之，於我心有戚戚焉。此心之所以合於王者，何也？」曰：「有復於王者曰：『吾力足以舉百鈞，而不足以舉一羽；明足以察秋毫之末，而不見輿薪。』則王許之乎？」曰：「否。」「今恩足以及禽獸，而功不至於百姓者，獨何與？然則一羽之不舉，為不用力焉；輿薪之不見，為不用明焉；百姓之不見保，為不用恩焉。故王之不王，不為也，非不能也。」曰：「不為者與不能者之形，何以異？」曰：「挾太山以超北海，語人曰：『我不能。』是誠不能也。為長者折枝，語人曰：『我不能。』是不為也，非不能也。故王之不王，非挾太山以超北海之類也；王之不王，是折枝之類也。」",
+      "「老吾老，以及人之老；幼吾幼，以及人之幼：天下可運於掌。《詩》雲：『刑于寡妻，至于兄弟，以御于家邦。』言舉斯心加諸彼而已。故推恩足以保四海，不推恩無以保妻子；古之人之所以大過人者，無他焉，善推其所為而已矣。今恩足以及禽獸，而功不至於百姓者，獨何與？權，然後知輕重；度，然後知長短。物皆然，心為甚。王請度之。」"
     ],
     hotspots: [
-      { id: 'ox', label: '將以釁鐘 (牽牛)', x: 70, y: 60 }
-    ],
-    ambience: '宮廷銅鐘迴響與沉穩對談聲'
+      { id: "ox", label: "以羊易之", x: 30, y: 50 },
+      { id: "feather", label: "不足以舉一羽", x: 60, y: 45 },
+      { id: "scale", label: "物皆然，心為甚", x: 50, y: 75 }
+    ]
   },
   {
-    id: 'paoding',
-    title: '庖丁解牛',
-    author: '莊子',
-    bgImage: 'https://images.unsplash.com/photo-1604085572502-a342416f193c?q=80&w=1000&auto=format&fit=crop',
+    id: "paoding",
+    title: "庖丁解牛",
+    author: "莊子",
+    bgImage: "./庖丁解牛.png",
     fullText: [
-      "臣之所好者，道也，進乎技矣。",
-      "始臣之解牛之時，所見無非牛者。三年之後，未嘗見全牛也。"
+      "庖丁為文惠君解牛，手之所觸，肩之所倚，足之所履，膝之所踦，砉然嚮然，奏刀騞然，莫不中音。合於《桑林》之舞，乃中《經首》之會。",
+      "文惠君曰：「嘻，善哉！技蓋至此乎？」",
+      "庖丁釋刀對曰：「臣之所好者道也，進乎技矣。始臣之解牛之時，所見無非牛者。三年之後，未嘗見全牛也。方今之時，臣以神遇而不以目視，官知止而神欲行。依乎天理，批大郤，導大窾，因其固然。技經肯綮之未嘗，而況大軱乎！良庖歲更刀，割也；族庖月更刀，折也。今臣之刀十九年矣，所解數千牛矣，而刀刃若新發於硎。彼節者有間，而刀刃者無厚；以無厚入有間，恢恢乎其於遊刃必有餘地矣，是以十九年而刀刃若新發於硎。雖然，每至於族，吾見其難為，怵然為戒，視為止，行為遲。動刀甚微，謋然已解，如土委地。提刀而立，為之四顧，為之躊躇滿志，善刀而藏之。」",
+      "文惠君曰：「善哉！吾聞庖丁之言，得養生焉。」"
     ],
     hotspots: [
-      { id: 'dao', label: '臣之所好者，道也', x: 50, y: 20 },
-      { id: 'ox', label: '所見無非牛者', x: 35, y: 50 },
-      { id: 'nature', label: '依乎天理', x: 50, y: 75 }
-    ],
-    ambience: '山林空谷、磨刀砉然與風過松濤聲'
+      { id: "knife", label: "奏刀騞然", x: 45, y: 55 },
+      { id: "mind", label: "官知止而神欲行", x: 50, y: 25 },
+      { id: "save", label: "善刀而藏之", x: 65, y: 75 }
+    ]
   },
   {
-    id: 'suqin',
-    title: '蘇秦約縱',
-    author: '戰國策',
-    bgImage: 'https://images.unsplash.com/photo-1560053608-13721e0d69e8?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["說秦王書十上，而說不行。", "蓋可以忽乎哉"],
-    hotspots: [{ id: 'scroll', label: '說秦王書十上', x: 40, y: 50 }],
-    ambience: '竹簡翻閱與策士激辯聲'
-  },
-  {
-    id: 'hongmen',
-    title: '鴻門會',
-    author: '史記',
-    bgImage: 'https://images.unsplash.com/photo-1599839619722-39751411ea63?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["沛公旦日從百餘騎來見項王。", "沛公至軍，立誅殺曹無傷"],
-    hotspots: [{ id: 'sword', label: '項莊拔劍舞', x: 55, y: 60 }],
-    ambience: '營帳風聲與劍拔弩張之聲'
-  },
-  {
-    id: 'zhanchengnan',
-    title: '戰城南',
-    author: '佚名',
-    bgImage: 'https://images.unsplash.com/photo-1533514755106-963d41f71df0?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["戰城南，死郭北，野死不葬烏可食。"],
-    hotspots: [{ id: 'crow', label: '烏可食', x: 30, y: 30 }],
-    ambience: '邊塞烽火與戰馬嘶鳴'
-  },
-  {
-    id: 'duange',
-    title: '短歌行',
-    author: '曹操',
-    bgImage: 'https://images.unsplash.com/photo-1478147424076-0bf176861f43?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["對酒當歌，人生幾何？譬如朝露，去日苦多。"],
-    hotspots: [{ id: 'moon', label: '明明如月', x: 80, y: 20 }, { id: 'wine', label: '對酒當歌', x: 40, y: 70 }],
-    ambience: '長江夜浪與飲酒吟唱'
-  },
-  {
-    id: 'guiqu',
-    title: '歸去來辭 (並序)',
-    author: '陶潛',
-    bgImage: 'https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["歸去來兮，田園將蕪胡不歸？"],
-    hotspots: [{ id: 'field', label: '田園將蕪', x: 50, y: 65 }],
-    ambience: '晨霧鳥鳴與幽池水響'
-  },
-  {
-    id: 'jiangjinjiu',
-    title: '將進酒',
-    author: '李白',
-    bgImage: './將進酒.png',
+    id: "suqin",
+    title: "蘇秦約縱",
+    author: "戰國策",
+    bgImage: "./蘇秦約縱.png",
     fullText: [
-      "君不見，黃河之水天上來，奔流到海不復回。",
-      "君不見，高堂明鏡悲白髮，朝如青絲暮成雪。"
+      "說秦王書十上而說不行。黑貂之裘弊，黃金百斤盡，資用乏絕，去秦而歸。羸滕履蹻，負書擔橐，形容枯槁，面目犁黑，狀有歸色。歸至家，妻不下纴，嫂不為炊，父母不與言。蘇秦喟歎曰：「妻不以我為夫，嫂不以我為叔，父母不以我為子，是皆秦之罪也！」",
+      "乃夜發書，陳箧數十，得太公《陰符》之謀，伏而誦之，簡練以為揣摩。讀書欲睡，引錐自刺其股，血流至足，曰：「安有說人主，不能出其金玉錦繡，取卿相之尊者乎？」期年，揣摩成，曰：「此真可以說當世之君矣。」",
+      "於是乃摩燕烏集闕，見趙王於華屋之下，抵掌而談，趙王大悅，封為武安君。當此之時，蘇秦將說楚王，路過洛陽，父母聞之，清宮除道，張樂設宴，郊迎三十里。妻側目而視，傾耳而聽；嫂蛇行匍伏，四拜自跪謝。蘇秦曰：「嫂何前倨而後卑也？」嫂曰：「以季子之位尊而多金。」蘇秦曰：「嗟乎！貧窮則父母不子，富貴則親戚畏懼。人生世上，勢位富貴，蓋可以忽乎哉！」"
     ],
     hotspots: [
-      { id: 'river', label: '黃河之水天上來', x: 75, y: 30 },
-      { id: 'goblet', label: '莫使金樽空對月', x: 30, y: 48 }
+      { id: "coat", label: "黑貂之裘弊", x: 30, y: 65 },
+      { id: "awl", label: "引錐自刺其股", x: 50, y: 70 },
+      { id: "rich", label: "嫂何前倨而後卑也", x: 70, y: 40 }
+    ]
+  },
+  {
+    id: "hongmen",
+    title: "鴻門會",
+    author: "史記",
+    bgImage: "./鴻門會.png",
+    fullText: [
+      "沛公旦日從百餘騎來見項王，至鴻門，謝曰：「臣與將軍戮力而攻秦，將軍戰河北，臣戰河南，然不自意能先入關破秦，得復見將軍於此。今者有小人之言，令將軍與臣有郤。」項王曰：「此沛公左司馬曹無傷言之；不然，籍何以至此？」項王即日因留沛公與飲。",
+      "項王、項伯東向坐，亞父南向坐。亞父者，范增也。沛公北向坐，張良西向侍。范增數目項王，舉所佩玉玦以示之者三，項王默然不應。范增起，出召項莊，謂曰：「君王為人不忍。若入前為壽，壽畢，請以劍舞，因擊沛公於坐，殺之。不者，若屬皆且為所虜。」莊則入為壽。壽畢，曰：「君王與沛公飲，軍中無以為樂，請以劍舞。」項王曰：「諾。」項莊拔劍起舞，項伯亦拔劍起舞，常以身翼蔽沛公，莊不得擊。",
+      "於是張良至軍門見樊噲。樊噲曰：「今日之事何如？」良曰：「甚急！今者項莊拔劍起舞，其意常在沛公也。」噲曰：「此迫矣！臣請入，與之同命。」噲即帶劍擁盾入軍門。披帷西向立，瞋目視項王，頭髮上指，目眥盡裂。項王按劍而跽曰：「客何為者？」張良曰：「沛公之參乘樊噲者也。」項王曰：「壯士！賜之卮酒。」則與斗卮酒。噲拜謝，起，立而飲之。項王曰：「賜之彘肩。」則與一生彘肩。樊噲覆其盾於地，加彘肩上，拔劍切而啖之。項王曰：「壯士！能復飲乎？」樊噲曰：「臣死且不避，卮酒安足辭！夫秦王有虎狼之心，殺人如不能舉，刑人如恐不勝，天下皆叛之。懷王與諸將約曰：『先破秦入咸陽者王之。』今沛公先破秦入咸陽，毫毛不敢有所近，封閉宮室，還軍霸上，以待大王來。勞苦功高如此，未有封侯之賞，而聽細說，欲誅有功之人。此亡秦之續耳，竊為大王不取也。」項王未有以應，曰：「坐。」樊噲從良坐。",
+      "坐須臾，沛公起如廁，因招樊噲出。沛公曰：「今者出，未辭也，為之奈何？」樊噲曰：「大行不顧細謹，大禮不辭小讓。如今人方為刀俎，我為魚肉，何辭為？」於是遂去。乃令張良留謝。沛公已去，間至軍。張良入謝，曰：「沛公不勝桮杓，不能辭。謹使良奉白璧一雙，再拜獻大王足下；玉斗一雙，再拜奉大將軍足下。」項王曰：「沛公安在？」良曰：「聞大王有意督過之，脫身獨去，已至軍矣。」項王受璧，置之坐上。亞父受玉斗，置之地，拔劍撞而破之，曰：「唉！豎子不足與謀。奪項王天下者，必沛公也。吾屬今為之虜矣！」沛公至軍，立誅殺曹無傷。"
     ],
-    ambience: '黃河奔流與杯盞清脆之聲'
+    hotspots: [
+      { id: "jade", label: "舉所佩玉玦以示之者三", x: 25, y: 35 },
+      { id: "sword_dance", label: "項莊拔劍起舞，其意常在沛公也", x: 50, y: 60 },
+      { id: "broken_cup", label: "拔劍撞而破之", x: 75, y: 50 }
+    ]
   },
   {
-    id: 'denggao',
-    title: '登高',
-    author: '杜甫',
-    bgImage: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["風急天高猿嘯哀，渚清沙白鳥飛迴。"],
-    hotspots: [{ id: 'mountain', label: '風急天高', x: 50, y: 20 }, { id: 'bird', label: '鳥飛迴', x: 30, y: 35 }],
-    ambience: '峽谷風急與猿啼鳥迴'
+    id: "zhanchengnan",
+    title: "戰城南",
+    author: "佚名",
+    bgImage: "./戰城南.png",
+    fullText: [
+      "戰城南，死郭北，野死不葬烏可食。",
+      "為我謂烏：「野死諒不葬，腐肉安能去子逃？」",
+      "水深激激，蒲葦冥冥。梟騎戰死，駑馬徘徊。",
+      "梁築室，何以南？何以北？禾黍不獲君何食？願為忠臣安可得？",
+      "思子良臣。良臣誠可思：朝行出攻，暮不夜歸！"
+    ],
+    hotspots: [
+      { id: "crow", label: "野死不葬烏可食", x: 75, y: 25 },
+      { id: "reed_field", label: "水深激激，蒲葦冥冥", x: 40, y: 70 },
+      { id: "horse_stay", label: "朝行出攻，暮不夜歸", x: 25, y: 60 }
+    ]
   },
   {
-    id: 'jinxue',
-    title: '進學解',
-    author: '韓愈',
-    bgImage: 'https://images.unsplash.com/photo-1521115162483-365f57fc6a18?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["業精於勤，荒於嬉；行成於思，毀於隨。"],
-    hotspots: [{ id: 'book', label: '業精於勤', x: 50, y: 60 }],
-    ambience: '書院晨鐘與朗朗讀書聲'
+    id: "duangexing",
+    title: "短歌行",
+    author: "曹操",
+    bgImage: "./短歌行.png",
+    fullText: [
+      "對酒當歌，人生幾何！譬如朝露，去日苦多。慨當以慷，憂思難忘。何以解憂？唯有杜康。",
+      "青青子衿，悠悠我心。但為君故，沉吟至今。呦呦鹿鳴，食野之萍。我有嘉賓，鼓瑟吹笙。",
+      "明明如月，何時可輟？憂從中來，不可斷絕。越陌度阡，枉用相存。契闊談讌，心念舊恩。",
+      "月明星稀，烏鵲南飛。繞樹三匝，何枝可依？山不厭高，海不厭深。周公吐哺，天下歸心。"
+    ],
+    hotspots: [
+      { id: "wine_cup", label: "何以解憂？唯有杜康", x: 30, y: 55 },
+      { id: "magpie", label: "月明星稀，烏鵲南飛", x: 70, y: 20 },
+      { id: "sea_mountain", label: "山不厭高，海不厭深", x: 50, y: 80 }
+    ]
   },
   {
-    id: 'zuiweng',
-    title: '醉翁亭記',
-    author: '歐陽修',
-    bgImage: 'https://images.unsplash.com/photo-1543169877-dbf4728551da?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["環滁皆山也。其西南諸峰，林壑尤美。"],
-    hotspots: [{ id: 'pavilion', label: '醉翁亭', x: 60, y: 50 }],
-    ambience: '山林鳥語與遊人宴飲聲'
+    id: "guiqulaici",
+    title: "歸去來辭（並序）",
+    author: "陶潛",
+    bgImage: "./歸去來辭.png",
+    fullText: [
+      "余家貧，耕植不足以自給。幼稚園滿，室僅當心，兼以殘生，不克自杖。親故多勸余為長吏，脫然有懷，求之靡途。會有四方之事，諸侯以惠愛為德，家叔以余貧苦，遂見用於小邑。於時風波未靜，心憚遠役。彭澤去家百里，公田之利，足以為酒，故便求之。及少日，眷然有歸輿之情。何者？質性自然，非矯厲所得；饑凍雖切，違己交病。嘗從人事，皆口腹自役。於是悵然慷慨，深愧平生之志。尋程氏妹喪於武昌，情在駿奔，自免去職。仲秋至冬，在官八十餘日。因事順心，命篇曰《歸去來兮》。乙巳歲十一月也。",
+      "歸去來兮，田園將蕪胡不歸？既自以心為形役，奚惆悵而獨悲？悟已往之不諫，知來者之可追。實迷途其未遠，覺今是而昨非。舟遙遙以輕颺，風飄飄而吹衣。問征夫以前路，恨晨光之熹微。",
+      "乃瞻衡宇，載欣載奔。僮僕歡迎，稚子候門。三徑就荒，松菊猶存。攜幼入室，有酒盈樽。引壺觴以自酌，眄庭柯以怡顏。倚南窗以寄傲，審容膝之易安。園日涉以成趣，門雖設而常關。策扶老以流憩，時矯首而遐觀。雲無心以出岫，鳥飛飛而知還。景翳翳以將入，撫孤松而盤桓。",
+      "歸去來兮，請息交以絕遊。世與我而相違，復駕言兮焉求？悅親戚之情話，樂琴書以消憂。農人告餘以春及，將有事於西疇。或命巾車，或棹孤舟。既窈窕以尋壑，亦崎嶇而經丘。木欣欣以向榮，泉涓涓而始流。善萬物之得時，感吾生之行休。",
+      "已矣乎！寓形宇內復幾時？曷不委心任去留？胡為乎遑遑欲何之？富貴非吾願，帝鄉不可期。懷良辰以孤往，或植杖而耘耔。登東皋以舒嘯，臨清流而賦詩。聊乘化以歸盡，樂夫天命復奚疑！"
+    ],
+    hotspots: [
+      { id: "boat_wind", label: "舟遙遙以輕颺，風飄飄而吹衣", x: 75, y: 65 },
+      { id: "pine", label: "撫孤松而盤桓", x: 35, y: 60 },
+      { id: "river_poem", label: "臨清流而賦詩", x: 50, y: 85 }
+    ]
   },
   {
-    id: 'chibi',
-    title: '前赤壁賦',
-    author: '蘇軾',
-    bgImage: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["壬戌之秋，七月既望，蘇子與客泛舟遊於赤壁之下。"],
-    hotspots: [{ id: 'boat', label: '泛舟遊於赤壁', x: 50, y: 70 }, { id: 'moon', label: '月出於東山之上', x: 75, y: 25 }],
-    ambience: '江上清風與洞簫悠揚'
+    id: "jiangjinjiu",
+    title: "將進酒",
+    author: "李白",
+    bgImage: "./將進酒.png",
+    fullText: [
+      "君不見，黃河之水天上來，奔流到海不復回。君不見，高堂明鏡悲白髮，朝如青絲暮成雪。",
+      "人生得意須盡歡，莫使金樽空對月。天生我材必有用，千金散盡還復來。烹羊宰牛且為樂，會須一飲三百杯。",
+      "岑夫子，丹丘生，將進酒，杯莫停。與爾同銷萬古愁。",
+      "鐘鼓饌玉不足貴，但願長醉不願醒。古來聖賢皆寂寞，惟有飲者留其名。陳王昔時宴平樂，斗酒十千恣歡虐。",
+      "主人何為言少錢，徑須沽取對君酌。五花馬，千金裘，呼兒將出換美酒，與爾同銷萬古愁。"
+    ],
+    hotspots: [
+      { id: "river", label: "黃河之水天上來", x: 75, y: 30 },
+      { id: "goblet", label: "莫使金樽空對月", x: 30, y: 48 },
+      { id: "horse", label: "五花馬，千金裘", x: 75, y: 82 }
+    ]
   },
   {
-    id: 'qitianle',
-    title: '齊天樂 (綠蕪凋盡臺城路)',
-    author: '周邦彥',
-    bgImage: 'https://images.unsplash.com/photo-1577085717492-38600f68d904?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["綠蕪凋盡臺城路，殊鄉又逢秋晚。"],
-    hotspots: [{ id: 'leaves', label: '綠蕪凋盡', x: 40, y: 60 }],
-    ambience: '晚秋寒蟬與蕭瑟秋風'
+    id: "denggao",
+    title: "登高",
+    author: "杜甫",
+    bgImage: "./登高.png",
+    fullText: [
+      "風急天高猿嘯哀，渚清沙白鳥飛迴。",
+      "無邊落木蕭蕭下，不盡長江滾滾來。",
+      "萬里悲秋常作客，百年多病獨登臺。",
+      "艱難苦恨繁霜鬢，潦倒新停濁酒杯。"
+    ],
+    hotspots: [
+      { id: "leaves", label: "無邊落木蕭蕭下", x: 30, y: 30 },
+      { id: "river_flow", label: "不盡長江滾滾來", x: 50, y: 65 },
+      { id: "platform", label: "百年多病獨登臺", x: 70, y: 45 }
+    ]
   },
   {
-    id: 'nanxiangzi',
-    title: '南鄉子 (何處望神州)',
-    author: '辛棄疾',
-    bgImage: 'https://images.unsplash.com/photo-1529175788481-9b4b08ff39e1?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["何處望神州？滿眼風光北固樓。"],
-    hotspots: [{ id: 'tower', label: '北固樓', x: 65, y: 40 }],
-    ambience: '登樓江風與壯志未酬之歎'
+    id: "jinxuejie",
+    title: "進學解",
+    author: "韓愈",
+    bgImage: "./進學解.png",
+    fullText: [
+      "國子先生晨入太學，招諸生立館下，誨之曰：「業精於勤，荒於嬉；行成於思，毀於隨。方今聖賢相逢，治具畢張。拔去凶邪，登崇俊良。占小善者率以錄，名一藝者無不庸。爬羅剔抉，刮垢磨光。蓋有日矣。諸生業患不能精，無患動之不時；行患不能成，無患隨之不公。傷未嘗以師克，在自勉而無怠。」",
+      "學生由班而出曰：「先生欺我們哉！先生之事先生，處心有年矣。手不釋卷，唫詠不止。下逮諸子，無不兼總。記一事必提其要，纂言必鉤其玄。貪多務得，細大不捐。焚膏油以繼晷，恒兀兀以窮年。先生之業，可謂勤矣。」",
+      "「抵排異端，攘斥佛老。補苴罅漏，張皇幽眇。尋墜緒之茫茫，獨旁搜而遠紹。障百川而東之，迴狂瀾於既倒。先生之於儒學，可謂有勞矣。」",
+      "「沉浸醲郁，含英咀華。作為文章，其書滿家。上規姚姒，渾渾無涯。周誥殷盤，佶屈聱牙。《春秋》三傳，束皙齊驅。自《詩》而降，《離騷》同歸。先生之於文，可謂閎且美矣。」",
+      "「公卿薦引，登進以序。然而先生名歸而怨至，位卑而官冷。冬無暖衣，夏無清暑。牛溲馬勃，敗鼓之皮，俱收並蓄，待用無遺。大匠操斤以大廈，顧之不一。先生獨何為而至此？其亦天之未喪斯文也！」"
+    ],
+    hotspots: [
+      { id: "teacher", label: "國子先生晨入太學", x: 35, y: 40 },
+      { id: "motto", label: "業精於勤，荒於嬉", x: 50, y: 60 },
+      { id: "building", label: "大匠操斤以大廈", x: 70, y: 30 }
+    ]
   },
   {
-    id: 'yexingchuan',
-    title: '雙調‧夜行船 秋思',
-    author: '馬致遠',
-    bgImage: 'https://images.unsplash.com/photo-1542408365-d6cebc94302c?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["百歲光陰一夢蝶，重回首往事堪嗟。"],
-    hotspots: [{ id: 'butterfly', label: '一夢蝶', x: 50, y: 40 }],
-    ambience: '秋夜水流與孤舟微漪'
+    id: "zuiwuntingji",
+    title: "醉翁亭記",
+    author: "歐陽修",
+    bgImage: "./醉翁亭記.png",
+    fullText: [
+      "環滁皆山也。其西南諸峰，林壑尤美，望之蔚然深秀者，琅琊也。山行六七里，漸聞水聲潺潺，而瀉出於兩峰之間者，釀泉也。峰迴路轉，有亭翼然臨於泉上者，醉翁亭也。作亭者誰？山之僧智僊也。名之者誰？太守自名也。太守與客來飲於此，飲少輒醉，而年又最高，故自號曰醉翁也。醉翁之意不在酒，在乎山水之間也。山水之樂，得之心而寓之酒也。",
+      "若夫日出而林霏開，雲歸而岩穴暝，晦明變化者，山間之朝暮也。野芳發而幽香，佳木秀而繁陰，風霜高潔，水落而石出者，山間之四時也。朝而往，暮而歸，四時之景不同，而樂亦無窮也。",
+      "至於負者歌於途，行者休於樹，前者呼，後者應，伛僂提攜，往來而不絕者，滁人遊也。臨溪而漁，溪深而魚肥；釀泉為酒，泉香而酒洌；山餚野蔌，雜然而前陳者，太守宴也。宴酣之樂，非絲非竹，射者中，弈者勝，觥籌交錯，起坐而喧嘩者，眾賓歡也。蒼顏白髮，頹然乎其間者，太守醉也。",
+      "已而夕陽在山，人影散亂，太守歸而賓客從也。樹林陰翳，鳴聲上下，遊人去而禽鳥樂也。然而禽鳥知山林之樂，而不知人之樂；人知從太守遊而樂，而不知太守之樂其樂也。醉能同其樂，醒能述其文者，太守也。太守謂誰？廬陵歐陽修也。"
+    ],
+    hotspots: [
+      { id: "mountain_view", label: "望之蔚然深秀者，琅琊也", x: 50, y: 25 },
+      { id: "pavilion", label: "有亭翼然臨於泉上者", x: 45, y: 55 },
+      { id: "old_man", label: "醉翁之意不在酒，在乎山水之間也", x: 65, y: 65 }
+    ]
   },
   {
-    id: 'fachang',
-    title: '法場 (竇娥冤)',
-    author: '關漢卿',
-    bgImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["沒來由犯王法，不提防遭刑憲。"],
-    hotspots: [{ id: 'snow', label: '六月飛霜', x: 50, y: 20 }],
-    ambience: '狂風大作與悲憤吶喊'
+    id: "qianchibifu",
+    title: "前赤壁賦",
+    author: "蘇軾",
+    bgImage: "./前赤壁賦.png",
+    fullText: [
+      "壬戌之秋，七月既望，蘇子與客泛舟遊於赤壁之下。清風徐來，水波不興。舉酒屬客，誦明月之詩，歌窈窕之章。少焉，月出於東山之上，徘徊於斗牛之間。白露橫江，水光接天。縱一葦之所如，凌萬頃之茫然。浩浩乎如馮虛御風，而不知其所止；飄飄乎如遺世獨立，羽化而登仙。",
+      "於是飲酒樂甚，扣舷而歌之。歌曰：「桂棹兮蘭槳，擊空明兮溯流光。渺渺兮予懷，望美人兮天一方。」客有吹洞簫者，倚歌而和之。其聲嗚嗚然，如怨如慕，如泣如訴；餘音嫋嫋，不絕如縷。舞幽壑之潛蛟，泣孤舟之嫠婦。",
+      "蘇子愀然，正襟危坐，而問客曰：「何為其然也？」客曰：「『月明星稀，烏鵲南飛』，此非曹孟德之詩乎？西望夏口，東望武昌，山川相繆，鬱乎蒼蒼，此非曹孟德之困於周郎者乎？方其破荊州，下江陵，順流而東也，舳艫千里，旌旗蔽空，釃酒臨江，橫槊賦詩，固一世之雄也，而今安在哉？況吾與子漁樵於江渚之上，侶魚蝦而友麋鹿，駕一葉之扁舟，舉匏樽以相屬。寄蜉蝣於天地，渺滄海之一粟。哀吾生之須臾，羨長江之無窮。挾飛仙以遨遊，抱明月而長終。知不可乎驟得，託遺響於悲風。」",
+      "蘇子曰：「客亦知夫水與月乎？逝者如斯，而未嘗往也；盈虛者如斯，而卒莫消長也。蓋將自其變者而觀之，則天地曾不能以一瞬；自其不變者而觀之，則物與我皆無盡也，而又何羨哉！且夫天地之間，物各有主，苟非吾之所有，雖一毫而莫取。惟江上之清風，與山間之明月，耳得之而為聲，目遇之而成色，取之無禁，用之不竭。是造物者之無盡藏也，而吾與子之所共適。」",
+      "客喜而笑，洗盞更酌。餚核既盡，杯盤狼籍。相與枕藉乎舟中，不知東方之既白。"
+    ],
+    hotspots: [
+      { id: "boat_red", label: "蘇子與客泛舟遊於赤壁之下", x: 40, y: 70 },
+      { id: "moon_sky", label: "月出於東山之上", x: 75, y: 20 },
+      { id: "flute", label: "客有吹洞簫者，倚歌而和之", x: 25, y: 65 }
+    ]
   },
   {
-    id: 'xihu',
-    title: '西湖七月半',
-    author: '張岱',
-    bgImage: 'https://images.unsplash.com/photo-1506197217985-78097b5d19ba?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["西湖七月半，一無可看，止可看看七月半之人。"],
-    hotspots: [{ id: 'lake', label: '西湖月夜', x: 50, y: 55 }],
-    ambience: '西湖夜市喧囂與絲竹聲'
+    id: "qitianle",
+    title: "齊天樂（綠蕪凋盡臺城路）",
+    author: "周邦彥",
+    bgImage: "./齊天樂.png",
+    fullText: [
+      "綠蕪凋盡臺城路，殊鄉又逢秋晚。暮雨初收，斜陽正滿，又是西風卷幔。臨高送遠。正急槳木蘭，催歸行束。愁與西風應有約，不信年華老去。",
+      "誰念客萬里，向長途、目斷征鴻？信美非吾土，更休聽、江南一聲悲角。年華暗換，念當時、豪俊今何在？應是共塵埃，伴淒涼、付與衰草。"
+    ],
+    hotspots: [
+      { id: "road", label: "綠蕪凋盡臺城路", x: 30, y: 70 },
+      { id: "sunset", label: "斜陽正滿", x: 65, y: 35 },
+      { id: "boat_leave", label: "正急槳木蘭", x: 45, y: 75 }
+    ]
   },
   {
-    id: 'quezhuang',
-    title: '卻奩 (桃花扇)',
-    author: '孔尚任',
-    bgImage: 'https://images.unsplash.com/photo-1533514755106-963d41f71df0?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["相公，這妝奩是哪裏來的？"],
-    hotspots: [{ id: 'box', label: '妝奩', x: 45, y: 70 }],
-    ambience: '秦淮河畔與戲曲柔腔'
+    id: "nanxiangzi",
+    title: "南鄉子（何處望神州）",
+    author: "辛棄疾",
+    bgImage: "./南鄉子.png",
+    fullText: [
+      "何處望神州？滿眼風光北固樓。千古興亡多少事？悠悠。不盡長江滾滾流。",
+      "年少萬兜鍪，坐斷東南戰未休。天下英雄誰敵手？曹劉。生子當如孫仲謀。"
+    ],
+    hotspots: [
+      { id: "tower", label: "滿眼風光北固樓", x: 50, y: 35 },
+      { id: "river_gong", label: "不盡長江滾滾流", x: 50, y: 65 },
+      { id: "armor", label: "年少萬兜鍪", x: 30, y: 55 }
+    ]
   },
   {
-    id: 'jiamu',
-    title: '接外孫賈母惜孤女',
-    author: '曹雪芹',
-    bgImage: 'https://images.unsplash.com/photo-1522067451000-09756b26d833?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["且說黛玉自那日棄舟登岸時，便有榮國府打發了轎子並拉行李的車輛久候了。", "也就不生別論"],
-    hotspots: [{ id: 'sedan', label: '榮國府轎子', x: 40, y: 65 }],
-    ambience: '侯門深院與環珮叮噹'
+    id: "yexingchuan",
+    title: "雙調‧夜行船 秋思",
+    author: "馬致遠",
+    bgImage: "./夜行船.png",
+    fullText: [
+      "【夜行船】百歲光陰一夢蝶，重回首往事堪嗟。今日春來，明朝花謝。急罰盞夜闌燈滅。",
+      "【喬木查】想秦宮漢闕，都做了衰草牛羊野。不因循戰伐，何必奔忙？利名竭，是非絕。紅塵不向門前惹，綠樹偏宜屋角遮，青山正補牆頭缺。更深也，月明些。",
+      "【慶宣和】投至兩邊成白髮，改換了朱顏。爭名利，奪要津，因循。多少豪傑，都做了荒塚孤墳。",
+      "【落梅風】天教富，莫浪求；算命裏，各有由。受用些明月清風，萬事皆休。"
+    ],
+    hotspots: [
+      { id: "butterfly", label: "百歲光陰一夢蝶", x: 40, y: 25 },
+      { id: "palace_ruin", label: "都做了衰草牛羊野", x: 65, y: 50 },
+      { id: "graves", label: "都做了荒塚孤墳", x: 30, y: 75 }
+    ]
   },
   {
-    id: 'sishui',
-    title: '死水',
-    author: '聞一多',
-    bgImage: 'https://images.unsplash.com/photo-1616428318884-2a6c11d295cd?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["這是一溝絕望的死水，清風吹不起半點漪淪。"],
-    hotspots: [{ id: 'water', label: '絕望的死水', x: 50, y: 80 }],
-    ambience: '沉寂無聲與壓抑氛圍'
+    id: "fachang",
+    title: "法場（《竇娥冤》第三折）",
+    author: "關漢卿",
+    bgImage: "./法場.png",
+    fullText: [
+      "【正宮】【端正好】沒由來犯王法，不提防遭刑憲，叫聲屈動地驚天！頃刻間遊魂歸地府，不覺的淚灑向黃泉。",
+      "【滾繡球】有日月朝暮懸，有鬼神掌著生死權。天地也！只合把清濁分辨，可怎生糊突了盜跖、顏淵？為善的受貧窮更命短，造惡的享富貴又壽延。天地也！做得個怕硬欺軟，卻原來也這般順水推船！地也，你不分好歹何為地！天也，你錯勘賢愚枉做天！哎，只落得兩淚漣漣。",
+      "【耍孩兒】不是我竇娥罰下這等願，委實的冤情不淺……若沒些兒靈聖與世人傳，怎的顯冤屈的竇娥願？我不要半星熱血紅塵灑，都只在八尺旗槍素練懸。"
+    ],
+    hotspots: [
+      { id: "shout", label: "叫聲屈動地驚天", x: 50, y: 45 },
+      { id: "white_ribbon", label: "八尺旗槍素練懸", x: 30, y: 25 },
+      { id: "sky_earth", label: "地也，你不分好歹何為地", x: 70, y: 75 }
+    ]
   },
   {
-    id: 'cuowu',
-    title: '錯誤',
-    author: '鄭愁予',
-    bgImage: 'https://images.unsplash.com/photo-1508849789987-4e5333c12b78?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["我打江南走過，那等在季節裏的容顏如蓮花的開落。"],
-    hotspots: [{ id: 'lotus', label: '容顏如蓮花', x: 28, y: 80 }, { id: 'horse_feet', label: '達達的馬蹄', x: 72, y: 78 }],
-    ambience: '江南煙雨與達達馬蹄聲'
+    id: "xihuqiyueban",
+    title: "西湖七月半",
+    author: "張岱",
+    bgImage: "./西湖七月半.png",
+    fullText: [
+      "西湖七月半，一無可看，止可看七月半之人。看七月半之人，以五類看之。",
+      "其一，樓船簫鼓，蕙安紅妝，列坐雕闌，燈火如晝，月亦看之，人亦看之，而不知其何處為月者，名家閨秀、富家子弟也。",
+      "其二，不舟不車，亦不看月，唯看人者，庸流俗子也；其三，絲竹並發，杯箸安設，韻友來，名妓至，匿影樹下，大罵狂呼，其快意莫可言狀者，名士之放浪也。",
+      "及其後，月亦漸高，人亦漸稀，美景方始。吾輩始艤舟湖畔，洗盞更酌，明月浮空，清輝萬里，聽水聲潺潺，方得真趣。此時看月者，亦可看也。吾輩縱舟，酣睡於十里荷花之中，香氣拍人，清夢甚愜。"
+    ],
+    hotspots: [
+      { id: "lake_crowd", label: "止可看七月半之人", x: 50, y: 65 },
+      { id: "moon_rise", label: "月亦漸高，人亦漸稀", x: 70, y: 20 },
+      { id: "lotus_dream", label: "酣睡於十里荷花之中", x: 25, y: 55 }
+    ]
   },
   {
-    id: 'shu',
-    title: '書',
-    author: '梁實秋',
-    bgImage: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["書，是人類進步的階梯。"],
-    hotspots: [{ id: 'book', label: '書卷', x: 50, y: 60 }],
-    ambience: '書房靜謐與翻書聲'
+    id: "quelian",
+    title: "卻奩(《桃花扇》第七齣)",
+    author: "孔尚任",
+    bgImage: "./卻奩.png",
+    fullText: [
+      "【香羅帶】把綠鬢且向菱花整，襯衫兒再把金爐薰。這雙奩是俺隨身命，怎肯輕輕送與他人？",
+      "【添字昭君】（李香君得知衣飾為阮大鋮所置，怒曰）官人依俺，就把這些東西，一總退了回去！脫巾幗，謝道韞。他雖是強秦，俺不是平原君，怎肯與奸臣做妾、受其牢籠？這頭面衣裳，橫豎不要了！"
+    ],
+    hotspots: [
+      { id: "mirror", label: "把綠鬢且向菱花整", x: 35, y: 45 },
+      { id: "box", label: "這雙奩是俺隨身命", x: 50, y: 60 },
+      { id: "reject", label: "一總退了回去", x: 65, y: 70 }
+    ]
   },
   {
-    id: 'jiaxiangdi',
-    title: '我的四個假想敵',
-    author: '余光中',
-    bgImage: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["余府有四個假想敵..."],
-    hotspots: [{ id: 'enemy', label: '假想敵', x: 60, y: 50 }],
-    ambience: '現代家庭與幽默對白'
+    id: "jiewaisun",
+    title: "接外孫賈母惜孤女",
+    author: "曹雪芹",
+    bgImage: "./接外孫賈母惜孤女.png",
+    fullText: [
+      "且說黛玉自那日棄舟登岸時，便有榮國府打發了轎子並拉行李的車輛伺候。眾人見黛玉年貌雖小，其舉止言談不俗，身體面貌雖弱，卻有一段不足之態，便知他有不足之症。兩邊皆是雕樑畫棟，兩邊大門上有兩隻大石獅子。",
+      "進了大門，穿過榮禧堂，一路走來，兩邊皆是丫鬟僕婦林立。至後房，賈母一把摟入懷中，大哭起來。眾姊妹連忙勸解。黛玉見過大舅母、二舅母。王熙鳳放聲大笑，接著又道：「天下真有這樣標緻的人物，我今兒才算見了！況且這通身的氣派，竟不像是老祖宗的外孫女兒，竟是個嫡親的孫女兒……」",
+      "一時黛玉進了房中，見賈母、王夫人皆在，談及讀書、吃藥等事，便也就不生別論。"
+    ],
+    hotspots: [
+      { id: "sedan", label: "榮國府打發了轎子", x: 25, y: 70 },
+      { id: "lion", label: "大門上有兩隻大石獅子", x: 75, y: 60 },
+      { id: "hug", label: "賈母一把摟入懷中", x: 50, y: 45 }
+    ]
   },
   {
-    id: 'yao',
-    title: '藥',
-    author: '魯迅',
-    bgImage: 'https://images.unsplash.com/photo-1509315664448-43d526e0be47?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["秋天的後半夜，月亮下去了，太陽還沒有出。"],
-    hotspots: [{ id: 'bun', label: '人血饅頭', x: 50, y: 65 }],
-    ambience: '深夜冷清與沉悶氣息'
+    id: "sishui",
+    title: "死水",
+    author: "聞一多",
+    bgImage: "./死水.png",
+    fullText: [
+      "這是一溝絕望的死水，清風吹不起半點漪淪。不如多扔些破銅爛鐵，爽性潑你的剩菜殘羹。",
+      "也許銅的要綠成翡翠，鐵罐上鏽出幾瓣桃花；再讓油膩織一層羅綺，黴菌給他蒸出些雲霞。",
+      "讓死水酵成一溝綠酒，漂滿了珍珠似的白沫；大珠有的變成小珠，小珠又破成碎沫。",
+      "那麼一溝絕望的死水，也就誇得上幾分鮮明。如果青蛙耐不住寂寞，又算死水叫出歌聲。",
+      "這是一溝絕望的死水，這裡斷不是美的所在，不如讓給醜惡來開墾，看他造出個什麼世界。"
+    ],
+    hotspots: [
+      { id: "stagnant_water", label: "這是一溝絕望的死水", x: 50, y: 70 },
+      { id: "iron_rust", label: "鐵罐上鏽出幾瓣桃花", x: 35, y: 80 }
+    ]
   },
   {
-    id: 'wan',
-    title: '碗',
-    author: '西西',
-    bgImage: 'https://images.unsplash.com/photo-1602213768474-06786a345465?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["我有一隻碗..."],
-    hotspots: [{ id: 'bowl', label: '碗', x: 50, y: 50 }],
-    ambience: '市井生活與日常細碎'
+    id: "cuowu",
+    title: "錯誤",
+    author: "鄭愁予",
+    bgImage: "./錯誤.png",
+    fullText: [
+      "我打江南走過，那等在季節裡的容顏如蓮花的開落。",
+      "東風不來，三月的柳絮不飛，你的心如小小寂寞的城，恰若青石的街道向晚。",
+      "跫音不響，三月的春帷不揭，你的心是小小的窗扉緊掩。",
+      "我達達的馬蹄是美麗的錯誤，我不是歸人，是個過客……"
+    ],
+    hotspots: [
+      { id: "lotus", label: "容顏如蓮花的開落", x: 70, y: 75 },
+      { id: "street", label: "青石的街道向晚", x: 50, y: 80 },
+      { id: "horse_hoof", label: "達達的馬蹄是美麗的錯誤", x: 30, y: 65 }
+    ]
   },
   {
-    id: 'richu',
-    title: '日出',
-    author: '曹禺',
-    bgImage: 'https://images.unsplash.com/photo-1489816279930-b97f0ba2dc2b?q=80&w=1000&auto=format&fit=crop',
-    fullText: ["李石清由中門進...", "福升把黃省三拖下去"],
-    hotspots: [{ id: 'sun', label: '日出', x: 70, y: 30 }],
-    ambience: '交際場浮華與時代悲歌'
+    id: "shu",
+    title: "書",
+    author: "梁實秋",
+    bgImage: "./書.png",
+    fullText: [
+      "「買書不如借書」，這話不知始於何人，大概是個極其吝嗇的讀書人說的。借來的書不得不快讀，因為有期限……",
+      "真正嗜書的人，在書攤上搜購，在書房裡把玩，那種樂趣絕非借書者所能領略。書是個最奇妙的東西。可以隨身攜帶，可以隨時翻閱。案頭榻置，無非編帙。古人讀書，韋編三絕，今人讀書，多浮光掠影，此乃學問之別也。"
+    ],
+    hotspots: [
+      { id: "book_pile", label: "案頭榻置，無非編帙", x: 50, y: 50 }
+    ]
+  },
+  {
+    id: "jiangxiangdi",
+    title: "我的四個假想敵",
+    author: "余光中",
+    bgImage: "./我的四個假想敵.png",
+    fullText: [
+      "或者是因為長女珊珊建立的惡劣先例，其餘三個女兒，只要男朋友的影子在路上一出現，我就會表現得十分敏感……",
+      "這四個不速之客，一來就要把我二十多年來苦心積慮、珍之惜之的四粒明珠，一粒一粒地帶走。父愛在某種程度上，也是一種專政。冥冥中，對手已經在路上了。"
+    ],
+    hotspots: [
+      { id: "four_pearls", label: "四粒明珠，一粒一粒地帶走", x: 50, y: 40 }
+    ]
+  },
+  {
+    id: "yao",
+    title: "藥",
+    author: "魯迅",
+    bgImage: "./藥.png",
+    fullText: [
+      "秋夜的後半夜，月亮下去了，太陽還沒有出，只剩下一片烏藍的天；除了夜遊的東西，什麼都睡著。華老栓忽然坐起身，擦著火柴，點上遍身油膩的燈盞。冷氣吹進，老栓咳嗽起來。",
+      "「喂！一手交錢，一手交貨！」一個渾身黑色的人，站在老栓面前，眼光正像兩把刀……老栓接過一個紅紅綠綠的、新鮮的饅頭，那便是治病的「藥」。饅頭上還滴著殷紅的血。老栓塞了銀子，急急忙忙往回趕。",
+      "微風吹動華大媽的短髮，他便在墳地裡呆呆地看。刑場上的人潮散去，墳頭上不知何時，多了一叢悲涼的花圈。瑜兒的母親看著烏鴉飛去，心中只有一片茫然。"
+    ],
+    hotspots: [
+      { id: "lamp", label: "點上遍身油膩的燈盞", x: 30, y: 55 },
+      { id: "bread", label: "新鮮的饅頭，那便是治病的「藥」", x: 50, y: 65 }
+    ]
+  },
+  {
+    id: "wan",
+    title: "碗",
+    author: "西西",
+    bgImage: "./碗.png",
+    fullText: [
+      "我們家裡有許多個碗。母親在廚房裡洗碗，瓷碗相碰，發出清脆的聲音。一隻普通的白瓷碗，上面畫著幾朵小藍花，盛著沉甸甸的記憶與歲月。碗上的裂痕，像是生命中無法抹平的傷口。",
+      "母親說：做人就像一隻碗，要盛得起東西，也要禁得起碰撞。我們在塵世中流轉，就如同一隻隻隨時可能破碎的瓷碗。然而平凡的日子裡，依然需要盛著溫熱的湯。"
+    ],
+    hotspots: [
+      { id: "china_bowl", label: "做人就像一隻碗，要盛得起東西", x: 50, y: 60 }
+    ]
+  },
+  {
+    id: "richu",
+    title: "日出",
+    author: "曹禺",
+    bgImage: "./日出.png",
+    fullText: [
+      "（李石清由中門進，面色陰沉，看著眼前的荒誕奢華。屋內傳來隱隱的歌舞聲。）",
+      "黃省三（哀求地）：『李先生，您行行好，您行行好！我不能走，我真的不能走！我還有三個小孩子，大姐才七歲，二姐五歲，小三子還躺在炕上吃奶，內人上個月又死了……您要是開除我，我們全家就沒路走了！』",
+      "李石清（冷酷地）：『社會就是這樣，這叫物競天擇，適者生存。你沒有本事，就得騰出位子來給別人！你要死，可以去跳海，別在這裡礙手礙腳！走吧！』",
+      "福升（上前拉住黃）：『走吧，黃先生，別跟經理為難了，經理說話從不改口。』",
+      "（福升把黃省三拖下去。黃省三狂呼：『這不是人過的日子！』）"
+    ],
+    hotspots: [
+      { id: "door_in", label: "李石清由中門進", x: 30, y: 40 },
+      { id: "beg", label: "我還有三個小孩子", x: 50, y: 65 },
+      { id: "drag_out", label: "福升把黃省三拖下去", x: 70, y: 70 }
+    ]
   }
 ];
 
-// --- 自定義 Hook: LocalStorage 進度與設置保存 ---
-function useLocalStorage(key, initialValue) {
-  const [storedValue, setStoredValue] = useState(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.log(error);
-      return initialValue;
-    }
-  });
+        function useLocalStorage(key, initialValue) {
+            const [storedValue, setStoredValue] = useState(() => {
+                try {
+                    const item = window.localStorage.getItem(key);
+                    return item ? JSON.parse(item) : initialValue;
+                } catch (error) { return initialValue; }
+            });
 
-  const setValue = (value) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.log(error);
-    }
-  };
-  return [storedValue, setValue];
-}
-
-// --- 國風開始按鈕 (具備 Yoyo 點擊縮放與中心波紋效果) ---
-function StartButton({ onClick }) {
-  const [ripples, setRipples] = useState([]);
-  const [isPressed, setIsPressed] = useState(false);
-
-  const handleClick = (e) => {
-    setIsPressed(true);
-    setTimeout(() => setIsPressed(false), 100); 
-
-    // 生成漣漪特效
-    const newRipple = { id: Date.now() };
-    setRipples(prev => [...prev, newRipple]);
-    
-    setTimeout(() => {
-      setRipples(prev => prev.filter(r => r.id !== newRipple.id));
-    }, 600);
-
-    setTimeout(onClick, 150);
-  };
-
-  return (
-    <button 
-      className={`start-btn clickable-hotspot ${isPressed ? 'pressed' : ''}`} 
-      onClick={handleClick}
-    >
-      開始
-      {ripples.map(r => (
-        <span key={r.id} className="custom-ripple" />
-      ))}
-    </button>
-  );
-}
-
-// --- 底部水墨暈染外圈按鈕 (完美還原 Game.png，高度微調壓縮) ---
-function InkRingButton({ children, onClick, active, label }) {
-  return (
-    <div className="flex flex-col items-center">
-      <button 
-        onClick={onClick} 
-        className={`relative w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 cursor-pointer select-none clickable-hotspot ${active ? 'text-[#c9a76b] scale-105' : 'text-gray-500 hover:text-gray-400'}`}
-      >
-        {/* 手繪水墨感外環 */}
-        <svg viewBox="0 0 100 100" className={`absolute inset-0 w-full h-full pointer-events-none opacity-85 transition-transform duration-500 ${active ? 'rotate-[45deg]' : 'rotate-0'}`}>
-          <path 
-            d="M 50,8 A 42,42 0 1,1 49.9,8 Z" 
-            stroke="currentColor" 
-            strokeWidth="4" 
-            fill="none" 
-            strokeLinecap="round"
-            strokeDasharray="160 40 100 60"
-          />
-          <path 
-            d="M 50,13 A 37,37 0 1,0 50.1,13 Z" 
-            stroke="currentColor" 
-            strokeWidth="1.8" 
-            fill="none" 
-            strokeLinecap="round"
-            strokeDasharray="30 20 80 40"
-            className="opacity-40"
-          />
-        </svg>
-        <div className="z-10 flex items-center justify-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] scale-[0.85]">
-          {children}
-        </div>
-      </button>
-      <span className={`text-[9px] mt-1 tracking-wider transition-colors duration-300 font-medium ${active ? 'text-[#c9a76b]' : 'text-gray-500'}`}>{label}</span>
-    </div>
-  );
-}
-
-// --- 詩境遊 主架構 ---
-export default function App() {
-  const [currentPage, setCurrentPage] = useState('start'); 
-  // 預設解鎖前三個篇章，使用新的 localStorage key 以強制更新舊資料
-  const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v3', ['jianjia', 'shejiang', 'qihuan']);
-  const [currentPoemId, setCurrentPoemId] = useState(null);
-  const [homeTab, setHomeTab] = useState('game'); 
-  const [readingPoem, setReadingPoem] = useState(null); 
-
-  // 介面疊加層狀態
-  const [showMenu, setShowMenu] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, sfx: true });
-  const [confirmReset, setConfirmReset] = useState(false); 
-  const [toastMessage, setToastMessage] = useState('');
-
-  // 字體大小控制 (sm, md, lg) -> 影響篇章卡牌及閱讀版面
-  const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
-
-  // 左右滑動手勢偵測
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
-
-  // 靜態資源預載
-  useEffect(() => {
-    const imagesToPreload = [
-      './Start.png', 
-      './Loading.png', 
-      './將進酒.png',
-      './Game.png'
-    ];
-    imagesToPreload.forEach(src => {
-      const img = new Image();
-      img.src = src;
-    });
-  }, []);
-
-  // 全域 100dvh 高度與防拷貝安全機制
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&display=swap');
-      
-      * {
-        -webkit-tap-highlight-color: transparent;
-        outline: none;
-      }
-      
-      html, body, #root {
-        height: 100dvh;
-        height: -webkit-fill-available; 
-        margin: 0;
-        padding: 0;
-        background-color: #0d0c0a;
-        color: #e0d5ba;
-        font-family: 'Noto Serif TC', serif;
-        overflow: hidden;
-        
-        /* 全域禁用複製與長按 */
-        user-select: none;
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        -webkit-touch-callout: none; 
-      }
-
-      .app-container {
-        height: 100dvh;
-        width: 100%;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-      }
-
-      img {
-        -webkit-user-drag: none;
-        -khtml-user-drag: none;
-        -moz-user-drag: none;
-        -o-user-drag: none;
-        user-drag: none;
-        pointer-events: none; 
-      }
-      
-      button, .clickable-hotspot, .interactive-nav {
-        pointer-events: auto;
-      }
-
-      /* 古典書法印章按鈕設定 */
-      .start-btn {
-        font-size: 15px; 
-        padding: 13px 44px; 
-        border-radius: 12px;
-        border: 1px solid rgba(255, 215, 120, 0.55);
-        background: rgba(10, 10, 8, 0.45);
-        color: #f5d38a;
-        position: relative;
-        overflow: hidden;
-        transition: transform 0.1s ease-in-out;
-        letter-spacing: 0.5em;
-        text-indent: 0.5em; 
-        box-shadow: 0 0 25px rgba(255, 215, 120, 0.1);
-      }
-      .start-btn.pressed {
-        transform: scale(0.92);
-      }
-      .custom-ripple {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        background: rgba(255, 215, 120, 0.45);
-        border-radius: 50%;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-        animation: custom-ripple-expand 0.6s ease-out forwards;
-      }
-      @keyframes custom-ripple-expand {
-        0% { transform: translate(-50%, -50%) scale(0); opacity: 0.8; }
-        100% { transform: translate(-50%, -50%) scale(12); opacity: 0; }
-      }
-
-      .ink-button {
-        background: rgba(13, 12, 10, 0.9);
-        border: 1px solid #c9a76b;
-        color: #e0d5ba;
-        box-shadow: 0 0 15px rgba(201, 167, 107, 0.15);
-        transition: all 0.3s ease;
-      }
-      .ink-button:active {
-        transform: scale(0.95);
-      }
-      @keyframes spin-slow {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      .animate-spin-slow {
-        animation: spin-slow 4s linear infinite;
-      }
-      @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-6px); }
-        40% { transform: translateX(6px); }
-        60% { transform: translateX(-4px); }
-        80% { transform: translateX(4px); }
-      }
-      .animate-shake {
-        animation: shake 0.4s ease-in-out;
-      }
-      @keyframes pulse-glow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(201, 167, 107, 0.3); border-color: rgba(201, 167, 107, 0.2); }
-        50% { box-shadow: 0 0 18px 8px rgba(201, 167, 107, 0.7); border-color: rgba(201, 167, 107, 0.9); }
-      }
-      .hint-pulse {
-        animation: pulse-glow 2s infinite;
-      }
-      @keyframes ripple {
-        0% { transform: scale(1); opacity: 1; }
-        100% { transform: scale(3.5); opacity: 0; }
-      }
-      .ripple-effect {
-        animation: ripple 0.6s ease-out forwards;
-      }
-      @keyframes fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      .animate-fade-in {
-        animation: fade-in 0.8s ease-in-out forwards;
-      }
-      .scrollbar-hide::-webkit-scrollbar {
-        display: none;
-      }
-      .scrollbar-hide {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-    `;
-    document.head.appendChild(style);
-
-    const handleContextMenu = (e) => e.preventDefault();
-    const handleKeyDown = (e) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C' || e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener('contextmenu', handleContextMenu);
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.head.removeChild(style);
-      window.removeEventListener('contextmenu', handleContextMenu);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
-  const triggerToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
-  };
-
-  const startGame = () => {
-    setCurrentPage('loading');
-    setTimeout(() => {
-      setCurrentPage('home');
-    }, 2200);
-  };
-
-  const openPoem = (id) => {
-    if (unlockedPoems.includes(id)) {
-      setCurrentPoemId(id);
-      setCurrentPage('game');
-      const poemObj = POEMS.find(p => p.id === id);
-      if (poemObj && audioSettings.bgm) {
-        setTimeout(() => {
-          triggerToast(`🎧 正在播放背景音效：${poemObj.ambience}`);
-        }, 1000);
-      }
-    } else {
-      triggerToast("此詩篇尚未解鎖，請先完成前置章節。");
-    }
-  };
-
-  const handlePoemComplete = (id) => {
-    const currentIndex = POEMS.findIndex(p => p.id === id);
-    if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
-      const nextId = POEMS[currentIndex + 1].id;
-      if (!unlockedPoems.includes(nextId)) {
-        setUnlockedPoems([...unlockedPoems, nextId]);
-        setTimeout(() => {
-          triggerToast(`✨ 恭喜解鎖新篇章：《${POEMS[currentIndex + 1].title}》！`);
-        }, 800);
-      }
-    }
-    setCurrentPage('home');
-  };
-
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e) => {
-    touchEndX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    const diff = touchStartX.current - touchEndX.current;
-    if (Math.abs(diff) > 80) { 
-      if (diff > 0 && homeTab === 'game') {
-        setHomeTab('reading');
-        triggerToast("切換至：閱讀模式");
-      } else if (diff < 0 && homeTab === 'reading') {
-        setHomeTab('game');
-        triggerToast("切換至：探索模式");
-      }
-    }
-  };
-
-  // 根據設置決定字體級別
-  const getCardFontClasses = () => {
-    if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
-    if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
-    return { title: 'text-sm', author: 'text-[10px]', info: 'text-[9px]' }; // md (default)
-  };
-
-  const getReadingFontClass = () => {
-    if (fontSize === 'sm') return 'text-sm leading-relaxed';
-    if (fontSize === 'lg') return 'text-lg md:text-xl leading-loose';
-    return 'text-base leading-relaxed'; // md (default)
-  };
-
-  // --- 畫面1: 啟動頁 (Start Screen) ---
-  if (currentPage === 'start') {
-    return (
-      <div 
-        className="app-container bg-cover bg-center flex flex-col items-center justify-center animate-fade-in"
-        style={{ backgroundImage: "url('./Start.png')" }}
-      >
-        <div className="absolute inset-0 bg-black/10 backdrop-blur-[0.5px]"></div>
-        <div className="relative z-10 flex flex-col items-center w-full">
-          <div className="h-[50dvh]"></div> 
-          <StartButton onClick={startGame} />
-        </div>
-      </div>
-    );
-  }
-
-  // --- 畫面2: 載入頁 (Loading Screen) ---
-  if (currentPage === 'loading') {
-    return (
-      <div 
-        className="app-container bg-cover bg-center flex flex-col items-center justify-center relative animate-fade-in"
-        style={{ backgroundImage: "url('./Loading.png')" }}
-      >
-        <div className="absolute top-1/4 flex flex-col items-center z-10">
-          <div className="relative w-28 h-28 flex items-center justify-center mt-20">
-            <div className="absolute inset-0 border-4 border-gray-800 rounded-full border-t-transparent border-l-transparent animate-spin-slow opacity-85" style={{ filter: 'blur(1px)' }}></div>
-            <div className="absolute inset-2.5 border-2 border-gray-600 rounded-full border-b-transparent animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }}></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- 畫面3: 主頁 (Home Screen) ---
-  if (currentPage === 'home') {
-    const cardFonts = getCardFontClasses();
-
-    return (
-      <div 
-        className="app-container bg-[#0f0e0c] flex flex-col justify-between animate-fade-in"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        <div 
-          className="absolute inset-0 opacity-15 pointer-events-none" 
-          style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1577085717492-38600f68d904?q=80&w=800&auto=format&fit=crop")', backgroundSize: 'cover', mixBlendMode: 'overlay' }}
-        ></div>
-        
-        {/* 極窄首頁頂部導航欄 */}
-        <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-          <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">詩境遊<span className="text-[10px] text-red-800 ml-1 font-bold">印</span></h1>
-          <div className="text-[10px] text-gray-500 tracking-widest uppercase">
-            {homeTab === 'game' ? '探索篇章' : '典藏閱讀'}
-          </div>
-        </header>
-
-        {/* 主體滾動內容 */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 relative z-10 scrollbar-hide">
-          {homeTab === 'game' ? (
-            <>
-              <div className="mb-4">
-                <p className="text-[#c9a76b] text-base tracking-widest">探索詩境之美</p>
-                <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
-              </div>
-
-              <h3 className="text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 推薦篇章</h3>
-              
-              <div className="space-y-3.5 mb-10">
-                {POEMS.map((poem) => {
-                  const isUnlocked = unlockedPoems.includes(poem.id);
-                  const isCompleted = isUnlocked && poem.hotspots.length > 0;
-                  
-                  return (
-                    <div 
-                      key={poem.id}
-                      onClick={() => openPoem(poem.id)}
-                      className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}
-                    >
-                      <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50">
-                        <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
-                          <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
-                        </div>
-                        {isUnlocked && (
-                           <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>
-                             意象探索: {poem.hotspots.length} 點
-                           </div>
-                        )}
-                      </div>
-                      <div className="px-2">
-                        {!isUnlocked ? <Lock size={15} className="text-gray-600" /> : 
-                         isCompleted ? <CheckCircle2 size={16} className="text-[#c9a76b]" /> :
-                         <ChevronLeft size={16} className="text-[#c9a76b] rotate-180" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mb-4">
-                <p className="text-[#c9a76b] text-base tracking-widest">典藏卷軸</p>
-                <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">溫故知新，品味已解鎖的文學經典</p>
-              </div>
-              
-              <div className="space-y-3.5 mb-10">
-                {POEMS.filter(p => unlockedPoems.includes(p.id)).map((poem) => (
-                  <div 
-                    key={poem.id}
-                    onClick={() => setReadingPoem(poem)}
-                    className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300"
-                  >
-                     <div>
-                        <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
-                        <p className={`${cardFonts.author} text-gray-500`}>{poem.author}</p>
-                     </div>
-                     <BookOpen size={18} className="text-[#c9a76b] opacity-80" />
-                  </div>
-                ))}
-                {unlockedPoems.length === 0 && (
-                  <p className="text-center text-gray-600 text-xs mt-10">尚無已解鎖篇章，請先至遊戲中挑戰。</p>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* 閱讀全文彈窗 (無標題欄，極致沉浸) */}
-        {readingPoem && (
-          <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
-             <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
-                <button onClick={() => setReadingPoem(null)} className="p-1 clickable-hotspot">
-                  <ChevronLeft size={24} className="text-[#c9a76b]" />
-                </button>
-                <div className="text-center">
-                  <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2>
-                  <p className="text-[10px] text-gray-500">{readingPoem.author}</p>
-                </div>
-                <div className="w-8"></div> 
-             </div>
-             <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
-                     style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
-                
-                <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6">
-                   {readingPoem.fullText && readingPoem.fullText.length > 0 ? (
-                     readingPoem.fullText.map((line, idx) => (
-                       <p key={idx} className={`${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>
-                         {line}
-                       </p>
-                     ))
-                   ) : (
-                     <p className="text-gray-500 tracking-widest text-xs">全文編撰中，敬請期待。</p>
-                   )}
-                </div>
-                <div className="h-16"></div> 
-             </div>
-          </div>
-        )}
-
-        {/* 雅士卷宗與成就系統彈窗 */}
-        {showMenu && (
-          <div className="absolute inset-0 z-50 bg-[#080807] flex flex-col animate-fade-in overflow-hidden pointer-events-auto">
-             <div className="flex items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]">
-                <button onClick={() => setShowMenu(false)} className="p-1 clickable-hotspot">
-                  <ChevronLeft size={24} className="text-[#c9a76b]" />
-                </button>
-                <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold ml-4">雅士成就</h2>
-             </div>
-             <div className="flex-1 p-5 overflow-y-auto scrollbar-hide">
-                <div className="flex flex-col items-center justify-center mt-4 mb-8">
-                   <div className="w-16 h-16 rounded-full border border-[#c9a76b] flex items-center justify-center mb-3 bg-[#141210] shadow-[0_0_15px_rgba(201,167,107,0.15)]">
-                      <Award size={32} className="text-[#c9a76b]" />
-                   </div>
-                   <h3 className="text-sm text-[#e0d5ba] tracking-widest font-bold">無名詩客</h3>
-                   <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{unlockedPoems.length * 10} 點</p>
-                </div>
-
-                {/* 勳章進度清單 */}
-                <div className="space-y-4">
-                   <h4 className="text-xs text-[#c9a76b] border-l border-[#c9a76b] pl-2 tracking-widest uppercase mb-2">詩境徽章</h4>
-                   
-                   <div className={`p-4 rounded-lg border transition-all duration-300 ${unlockedPoems.length >= 1 ? 'border-[#4a3f2b] bg-[#1a1712]/80' : 'border-[#1a1714] bg-[#0c0a09] opacity-40'}`}>
-                      <div className="flex items-center gap-3">
-                         <Star size={20} className={unlockedPoems.length >= 1 ? "text-[#c9a76b]" : "text-gray-600"} />
-                         <div>
-                            <h5 className="text-xs text-[#e0d5ba] font-bold">初學乍練</h5>
-                            <p className="text-[10px] text-gray-500 mt-0.5">成功解鎖並開啟第 1 個 DSE 詩意場景。</p>
-                         </div>
-                      </div>
-                   </div>
-
-                   <div className={`p-4 rounded-lg border transition-all duration-300 ${unlockedPoems.length >= 3 ? 'border-[#4a3f2b] bg-[#1a1712]/80' : 'border-[#1a1714] bg-[#0c0a09] opacity-40'}`}>
-                      <div className="flex items-center gap-3">
-                         <Star size={20} className={unlockedPoems.length >= 3 ? "text-[#c9a76b]" : "text-gray-600"} />
-                         <div>
-                            <h5 className="text-xs text-[#e0d5ba] font-bold">熟讀深思</h5>
-                            <p className="text-[10px] text-gray-500 mt-0.5">累計解鎖 3 個以上經典詩歌章節。</p>
-                         </div>
-                      </div>
-                   </div>
-
-                   <div className={`p-4 rounded-lg border transition-all duration-300 ${unlockedPoems.length >= POEMS.length ? 'border-[#4a3f2b] bg-[#1a1712]/80' : 'border-[#1a1714] bg-[#0c0a09] opacity-40'}`}>
-                      <div className="flex items-center gap-3">
-                         <Star size={20} className={unlockedPoems.length >= POEMS.length ? "text-[#c9a76b]" : "text-gray-600"} />
-                         <div>
-                            <h5 className="text-xs text-[#e0d5ba] font-bold">倒背如流</h5>
-                            <p className="text-[10px] text-gray-500 mt-0.5">解鎖目前收錄的全部古代及近代文學篇章。</p>
-                         </div>
-                      </div>
-                   </div>
-
-                   {/* ❖ 預留文創與集章典藏系統 (O2O Stamp System) */}
-                   <div className="pt-4 border-t border-[#2d281f] mt-6">
-                      <h4 className="text-xs text-[#c9a76b] border-l border-[#c9a76b] pl-2 tracking-widest uppercase mb-3">
-                         實體文創集章冊
-                      </h4>
-                      <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">
-                         完成指定篇章探索，即可自動集得專屬古風印鑑。
-                         <br/><span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 實體連動：</span>集滿指定數量，未來可於聯名書店或藝文空間出示此頁面，兌換實體「水墨拓印紀念明信片」！
-                      </p>
-
-                      <div className="grid grid-cols-3 gap-3">
-                         {/* 蒹葭印 */}
-                         <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('jianjia') ? 'border-[#c9a76b]/40 text-[#c9a76b]' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
-                            <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center text-xs font-bold leading-none select-none relative overflow-hidden">
-                               <div className="absolute inset-0 bg-[#c9a76b]/15 rounded-full rounded-tl-none transform rotate-12"></div>
-                               蒹
-                            </div>
-                            <span className="text-[9px] mt-1.5 font-bold">白露蒹葭印</span>
-                            <span className="text-[7px] text-gray-600 mt-0.5">完成解鎖</span>
-                         </div>
-
-                         {/* 涉江印 */}
-                         <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('shejiang') ? 'border-[#c9a76b]/40 text-[#c9a76b]' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
-                            <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center text-xs font-bold leading-none select-none relative overflow-hidden">
-                               <div className="absolute inset-0 bg-[#c9a76b]/15 rounded-full rounded-tr-none transform -rotate-6"></div>
-                               涉
-                            </div>
-                            <span className="text-[9px] mt-1.5 font-bold">楚辭涉江印</span>
-                            <span className="text-[7px] text-gray-600 mt-0.5">完成解鎖</span>
-                         </div>
-
-                         {/* 齊桓印 */}
-                         <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('qihuan') ? 'border-[#c9a76b]/40 text-[#c9a76b]' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
-                            <div className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center text-xs font-bold leading-none select-none relative overflow-hidden">
-                               <div className="absolute inset-0 bg-[#c9a76b]/15 rounded-full rounded-bl-none transform rotate-45"></div>
-                               齊
-                            </div>
-                            <span className="text-[9px] mt-1.5 font-bold">齊宣王大印</span>
-                            <span className="text-[7px] text-gray-600 mt-0.5">完成解鎖</span>
-                         </div>
-                      </div>
-                      
-                      <div className="mt-4 p-2.5 rounded border border-[#2d281f]/60 bg-[#161411]/50 text-center flex items-center justify-center gap-1.5">
-                         <div className="w-2 h-2 rounded-full bg-green-700/80 animate-pulse"></div>
-                         <span className="text-[9px] text-gray-400 tracking-widest font-bold">Supabase 雲端數據已同步連線</span>
-                      </div>
-                   </div>
-                </div>
-                <div className="h-10"></div>
-             </div>
-          </div>
-        )}
-
-        {/* 系統設置彈窗 */}
-        {showSettings && (
-          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
-             <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-[85%] max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
-                <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
-                
-                <div className="space-y-4 mb-6 px-1">
-                   <div className="flex justify-between items-center">
-                      <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
-                      <button 
-                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`}
-                        onClick={() => setAudioSettings({...audioSettings, bgm: !audioSettings.bgm})}
-                      >
-                         <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
-                      </button>
-                   </div>
-                   <div className="flex justify-between items-center">
-                      <span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
-                      <button 
-                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`}
-                        onClick={() => setAudioSettings({...audioSettings, sfx: !audioSettings.sfx})}
-                      >
-                         <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
-                      </button>
-                   </div>
-
-                   {/* 新增字體大小調節控制列 */}
-                   <div className="pt-2">
-                      <div className="flex justify-between items-center mb-1.5">
-                         <span className="text-[#e0d5ba] tracking-widest text-xs">古典字體大小</span>
-                         <span className="text-[#c9a76b] font-bold text-[10px] uppercase">
-                           {fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}
-                         </span>
-                      </div>
-                      <div className="flex gap-2.5">
-                        {['sm', 'md', 'lg'].map((sz) => (
-                          <button
-                            key={sz}
-                            onClick={() => setFontSize(sz)}
-                            className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}
-                          >
-                            {sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}
-                          </button>
-                        ))}
-                      </div>
-                   </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                   {!confirmReset ? (
-                     <button 
-                       className="w-full py-2 border border-red-900/30 text-red-600/80 rounded tracking-widest text-xs clickable-hotspot hover:bg-red-950/20 transition-colors"
-                       onClick={() => setConfirmReset(true)}
-                     >
-                       清除探索紀錄
-                     </button>
-                   ) : (
-                     <div className="flex gap-2">
-                        <button 
-                          className="flex-1 py-2 border border-gray-700 text-gray-500 rounded tracking-widest text-xs clickable-hotspot"
-                          onClick={() => setConfirmReset(false)}
-                        >
-                          取消
-                        </button>
-                        <button 
-                          className="flex-1 py-2 bg-red-900/40 text-[#e0d5ba] rounded tracking-widest text-xs clickable-hotspot border border-red-800/40"
-                          onClick={() => {
-                             setUnlockedPoems(['jiangjinjiu', 'paoding', 'guiyuan']); 
-                             setConfirmReset(false);
-                             setShowSettings(false);
-                             triggerToast("探索紀錄已重置");
-                          }}
-                        >
-                          確定
-                        </button>
-                     </div>
-                   )}
-                   <button 
-                     className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium"
-                     onClick={() => setShowSettings(false)}
-                   >
-                     關閉
-                   </button>
-                </div>
-             </div>
-          </div>
-        )}
-
-        {/* 底部導航欄與水墨分界裝飾線 (高度壓縮) */}
-        <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col pt-1 pb-1.5 border-t border-[#2d281f]/40">
-          
-          {/* ❖ 古典花紋水平分隔線 */}
-          <div className="flex items-center justify-center w-full px-12 mb-2">
-            <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-[#c9a76b]/35"></div>
-            <div className="mx-2 text-[#c9a76b]/60 scale-75 select-none text-[8px]">❖</div>
-            <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-[#c9a76b]/35"></div>
-          </div>
-
-          {/* 底部四大水墨按鈕 */}
-          <div className="flex justify-around items-center px-4 w-full">
-            <InkRingButton 
-              active={homeTab === 'game' && !showMenu && !showSettings} 
-              onClick={() => {
-                setHomeTab('game');
-                setShowMenu(false);
-                setShowSettings(false);
-              }}
-              label="探索"
-            >
-              <BookOpen size={20} />
-            </InkRingButton>
-
-            <InkRingButton 
-              active={homeTab === 'reading' && !showMenu && !showSettings} 
-              onClick={() => {
-                setHomeTab('reading');
-                setShowMenu(false);
-                setShowSettings(false);
-              }}
-              label="閱讀"
-            >
-              <Heart size={20} />
-            </InkRingButton>
-
-            <InkRingButton 
-              active={showMenu} 
-              onClick={() => {
-                setShowMenu(true);
-                setShowSettings(false);
-              }}
-              label="成就"
-            >
-              <Star size={20} />
-            </InkRingButton>
-
-            <InkRingButton 
-              active={showSettings} 
-              onClick={() => {
-                setShowSettings(true);
-                setConfirmReset(false);
-              }}
-              label="設置"
-            >
-              <Settings size={20} />
-            </InkRingButton>
-          </div>
-        </div>
-
-        {/* 浮動提示框 */}
-        {toastMessage && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-[#161411]/95 border border-[#c9a76b]/40 py-2 px-4 rounded-md text-[11px] text-[#e0d5ba] tracking-wider shadow-xl animate-fade-in text-center max-w-[80dvw]">
-            {toastMessage}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // --- 畫面4: 實機遊戲挑戰 (Game Screen) ---
-  if (currentPage === 'game') {
-    const poem = POEMS.find(p => p.id === currentPoemId);
-    return (
-      <GamePlayArea 
-        poem={poem} 
-        onBack={() => setCurrentPage('home')} 
-        onComplete={() => handlePoemComplete(poem.id)} 
-        triggerToast={triggerToast}
-        audioSettings={audioSettings}
-      />
-    );
-  }
-
-  return null;
-}
-
-// --- 實機遊玩核心元件 (GamePlayArea) ---
-function GamePlayArea({ poem, onBack, onComplete, triggerToast, audioSettings }) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [mistakes, setMistakes] = useState({}); 
-  const [isShaking, setIsShaking] = useState(false);
-  const [showCompletion, setShowCompletion] = useState(false);
-  const [clickedPos, setClickedPos] = useState(null); 
-  const [showSubtitle, setShowSubtitle] = useState(false); // 字幕開關：預設關閉
-  const [showInGameSettings, setShowInGameSettings] = useState(false);
-  const [confirmInGameReset, setConfirmInGameReset] = useState(false);
-
-  const handleHotspotClick = (index, e) => {
-    e.stopPropagation();
-    
-    if (index === currentStep) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-      
-      setClickedPos({ 
-        x: rect.left + rect.width / 2 - parentRect.left, 
-        y: rect.top + rect.height / 2 - parentRect.top, 
-        success: true 
-      });
-
-      setTimeout(() => {
-        if (currentStep + 1 >= poem.hotspots.length) {
-          setShowCompletion(true);
-        } else {
-          setCurrentStep(currentStep + 1);
+            const setValue = (value) => {
+                try {
+                    const valueToStore = value instanceof Function ? value(storedValue) : value;
+                    setStoredValue(valueToStore);
+                    window.localStorage.setItem(key, JSON.stringify(valueToStore));
+                } catch (error) {}
+            };
+            return [storedValue, setValue];
         }
-        setClickedPos(null);
-      }, 700);
 
-    } else if (index > currentStep) {
-      setMistakes(prev => ({
-        ...prev,
-        [currentStep]: (prev[currentStep] || 0) + 1 
-      }));
-      
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 400);
-      
-      const rect = e.currentTarget.getBoundingClientRect();
-      const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-      
-      setClickedPos({ 
-        x: rect.left + rect.width / 2 - parentRect.left, 
-        y: rect.top + rect.height / 2 - parentRect.top, 
-        success: false 
-      });
-      setTimeout(() => setClickedPos(null), 400);
-    }
-  };
+        function StartButton({ onClick }) {
+            const [ripples, setRipples] = useState([]);
+            const [isPressed, setIsPressed] = useState(false);
 
-  const handleBackgroundClick = (e) => {
-    setMistakes(prev => ({
-      ...prev,
-      [currentStep]: (prev[currentStep] || 0) + 1
-    }));
-    setIsShaking(true);
-    setTimeout(() => setIsShaking(false), 400);
+            const handleClick = (e) => {
+                setIsPressed(true);
+                setTimeout(() => setIsPressed(false), 100); 
+                const newRipple = { id: Date.now() };
+                setRipples(prev => [...prev, newRipple]);
+                setTimeout(() => setRipples(prev => prev.filter(r => r.id !== newRipple.id)), 600);
+                setTimeout(onClick, 150);
+            };
 
-    const parentRect = e.currentTarget.getBoundingClientRect();
-    setClickedPos({ 
-      x: e.clientX - parentRect.left, 
-      y: e.clientY - parentRect.top, 
-      success: false 
-    });
-    setTimeout(() => setClickedPos(null), 400);
-  };
+            return (
+                <button className={`start-btn clickable-hotspot ${isPressed ? 'pressed' : ''}`} onClick={handleClick}>
+                    開始
+                    {ripples.map(r => <span key={r.id} className="custom-ripple" />)}
+                </button>
+            );
+        }
 
-  return (
-    <div className={`app-container bg-black overflow-hidden animate-fade-in ${isShaking ? 'animate-shake' : ''}`}>
-      {/* 沉浸式遊戲底層圖 */}
-      <div 
-        className="absolute inset-0 w-full h-full cursor-pointer animate-fade-in"
-        style={{ pointerEvents: 'auto' }}
-        onClick={handleBackgroundClick}
-      >
-        <img 
-          src={poem.bgImage} 
-          alt="Backdrop" 
-          className="w-full h-full object-cover opacity-65"
-        />
-      </div>
-      
-      {/* 懸浮頂部控制列 */}
-      <div className="absolute top-0 left-0 w-full py-1.5 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/35 backdrop-blur-[1px]">
-        <button onClick={onBack} className="pointer-events-auto p-1.5 clickable-hotspot">
-          <ChevronLeft size={22} className="text-[#c9a76b] drop-shadow-md" />
-        </button>
-        <div className="text-center drop-shadow-lg">
-          <h2 className="text-sm text-[#e0d5ba] tracking-[0.25em] font-medium">{poem.title}</h2>
-          <p className="text-[9px] text-gray-400 font-light">— {poem.author} —</p>
-        </div>
-        
-        {/* 字幕提示切換 */}
-        <button 
-          onClick={() => {
-            setShowSubtitle(!showSubtitle);
-            triggerToast(showSubtitle ? "提示已隱藏" : "提示已開啟");
-          }} 
-          className="pointer-events-auto p-1.5 opacity-80 hover:opacity-100 transition-opacity flex flex-col items-center clickable-hotspot"
-        >
-          {showSubtitle ? <Eye size={18} className="text-[#c9a76b]" /> : <EyeOff size={18} className="text-gray-400" />}
-        </button>
-      </div>
-
-      {/* 國風熱區 (Hotspots) 覆蓋層 */}
-      {poem.hotspots.map((spot, index) => {
-        const isCurrentTarget = index === currentStep;
-        const isCompleted = index < currentStep;
-        const mistakeCount = mistakes[index] || 0;
-        
-        // 當前目標且錯誤達 2 次以上，則發出呼吸燈提示
-        const needsHint = isCurrentTarget && mistakeCount >= 2;
-
-        return (
-          <div 
-            key={spot.id}
-            className={`absolute w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center clickable-hotspot transition-opacity duration-500
-              ${isCompleted ? 'opacity-0 pointer-events-none' : 'opacity-100'}
-            `}
-            style={{ left: `${spot.x}%`, top: `${spot.y}%`, zIndex: 10 }}
-            onClick={(e) => handleHotspotClick(index, e)}
-          >
-            {/* 水墨擴散提示點 */}
-            <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500
-              ${needsHint ? 'border border-[#c9a76b] hint-pulse bg-[#c9a76b]/20 shadow-[0_0_12px_rgba(201,167,107,0.7)]' : 'bg-transparent'}
-              ${isCurrentTarget && mistakeCount === 1 ? 'bg-white/10' : ''}
-            `}></div>
-          </div>
-        );
-      })}
-
-      {/* 點擊落點水墨波紋 */}
-      {clickedPos && (
-        <div 
-          className={`absolute rounded-full pointer-events-none z-30 ripple-effect
-            ${clickedPos.success ? 'border-2 border-[#c9a76b] bg-[#c9a76b]/25 shadow-[0_0_12px_#c9a76b]' : 'border-2 border-red-500/40 bg-red-500/15'}
-          `}
-          style={{ 
-            left: clickedPos.x, 
-            top: clickedPos.y, 
-            width: '24px', 
-            height: '24px', 
-            marginLeft: '-12px', 
-            marginTop: '-12px' 
-          }}
-        />
-      )}
-
-      {/* 底部沉浸式字幕區 */}
-      {/* 確保有高的 z-index (z-30)，但 pointer-events-none 允許用戶穿透點擊下方光點，並使用 45% 透明度底色與高質感模糊 */}
-      <div className="absolute bottom-24 left-0 w-full px-4 text-center pointer-events-none z-30">
-        {currentStep < poem.hotspots.length && (
-          <div className="h-10 flex items-center justify-center pointer-events-none">
-            {showSubtitle ? (
-              <p className="text-sm text-[#e0d5ba] tracking-widest font-bold bg-black/45 backdrop-blur-[2px] py-1.5 px-4 rounded-full inline-block drop-shadow-md">
-                {poem.hotspots[currentStep].label}
-              </p>
-            ) : (
-              <p className="text-[10px] text-gray-400/80 tracking-widest italic bg-black/45 backdrop-blur-[2px] py-1.5 px-4 rounded-full inline-block">
-                〔 默記：請於畫面中點選對應意象 〕
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 底部功能與進度面板 (高度壓縮) */}
-      <div className="absolute bottom-0 left-0 w-full bg-[#0a0a09]/95 flex flex-col pt-1 pb-1.5 border-t border-[#2d281f]/40 z-20">
-        
-        {/* 國風花紋分割線 */}
-        <div className="flex items-center justify-center w-full px-12 mb-2">
-          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-[#c9a76b]/35"></div>
-          <div className="mx-2 text-[#c9a76b]/60 scale-75 select-none text-[8px]">❖</div>
-          <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-[#c9a76b]/35"></div>
-        </div>
-
-        {/* 遊戲介面對稱控制區 */}
-        <div className="flex justify-around items-center px-4 w-full">
-          <InkRingButton 
-            active={false} 
-            onClick={onBack}
-            label="返回"
-          >
-            <ChevronLeft size={20} className="mr-0.5" />
-          </InkRingButton>
-
-          {/* 進度數值圈 (壓縮高度 w-10 h-10) */}
-          <div className="flex flex-col items-center">
-            <div className="w-10 h-10 flex items-center justify-center rounded-full border border-[#2d281f]/50 relative bg-[#131210]">
-              <span className="text-[#c9a76b] font-bold text-[11px] tracking-widest">{currentStep} / {poem.hotspots.length}</span>
-            </div>
-            <span className="text-[9px] mt-1 tracking-wider text-gray-500">進度</span>
-          </div>
-
-          <InkRingButton 
-            active={showInGameSettings} 
-            onClick={() => {
-              setShowInGameSettings(true);
-              setConfirmInGameReset(false);
-            }}
-            label="設置"
-          >
-            <Settings size={20} />
-          </InkRingButton>
-        </div>
-      </div>
-
-      {/* 關卡內設置彈窗 */}
-      {showInGameSettings && (
-        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
-          <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-[80%] max-w-xs p-5 shadow-[0_0_20px_rgba(201,167,107,0.15)]">
-            <h2 className="text-sm text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">挑戰設置</h2>
-            
-            <div className="flex flex-col gap-3">
-               <button 
-                 className="w-full py-2.5 bg-[#1e1c18] border border-[#3e3525] text-gray-300 rounded tracking-widest text-xs clickable-hotspot"
-                 onClick={() => {
-                   setShowSubtitle(!showSubtitle);
-                   setShowInGameSettings(false);
-                 }}
-               >
-                 {showSubtitle ? "關閉字幕提示" : "啟用字幕提示"}
-               </button>
-
-               {!confirmInGameReset ? (
-                 <button 
-                   className="w-full py-2.5 border border-red-900/30 text-red-600/80 rounded tracking-widest text-xs clickable-hotspot hover:bg-red-950/20 transition-colors"
-                   onClick={() => setConfirmInGameReset(true)}
-                 >
-                   重新挑戰本篇
-                 </button>
-               ) : (
-                 <div className="flex gap-2">
-                    <button 
-                      className="flex-1 py-2.5 border border-gray-700 text-gray-500 rounded tracking-widest text-xs clickable-hotspot"
-                      onClick={() => setConfirmInGameReset(false)}
-                    >
-                      取消
+        /* 導航環按鈕 (使用 FontAwesome) */
+        function InkRingButton({ iconClass, onClick, active, label }) {
+            return (
+                <div className="flex flex-col items-center">
+                    <button onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 cursor-pointer select-none clickable-hotspot ${active ? 'text-[#c9a76b] scale-105' : 'text-gray-500 hover:text-gray-400'}`}>
+                        <svg viewBox="0 0 100 100" className={`absolute inset-0 w-full h-full pointer-events-none opacity-85 transition-transform duration-500 ${active ? 'rotate-[45deg]' : 'rotate-0'}`}>
+                            <path d="M 50,8 A 42,42 0 1,1 49.9,8 Z" stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round" strokeDasharray="160 40 100 60" />
+                            <path d="M 50,13 A 37,37 0 1,0 50.1,13 Z" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeDasharray="30 20 80 40" className="opacity-40" />
+                        </svg>
+                        <div className="z-10 flex items-center justify-center filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                            <i className={`${iconClass} ${active ? 'opacity-100' : 'opacity-80'}`}></i>
+                        </div>
                     </button>
-                    <button 
-                      className="flex-1 py-2.5 bg-red-900/40 text-[#e0d5ba] rounded tracking-widest text-xs clickable-hotspot border border-red-800/40"
-                      onClick={() => {
-                        setCurrentStep(0);
-                        setMistakes({});
-                        setConfirmInGameReset(false);
-                        setShowInGameSettings(false);
-                        triggerToast("本篇進度已重置");
-                      }}
-                    >
-                      確認
-                    </button>
-                 </div>
-               )}
+                    <span className={`text-[9px] mt-1 tracking-wider transition-colors duration-300 font-medium ${active ? 'text-[#c9a76b]' : 'text-gray-500'}`}>{label}</span>
+                </div>
+            );
+        }
 
-               <button 
-                 className="ink-button w-full py-2.5 rounded tracking-widest text-xs clickable-hotspot font-medium mt-2"
-                 onClick={() => setShowInGameSettings(false)}
-               >
-                 返回篇章
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
+        function App() {
+            const [currentPage, setCurrentPage] = useState('start'); 
+            const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
+            const [currentPoemId, setCurrentPoemId] = useState(null);
+            const [homeTab, setHomeTab] = useState('game'); 
+            const [readingPoem, setReadingPoem] = useState(null); 
 
-      {/* 完成蓋印與保存進度彈窗 */}
-      {showCompletion && (
-        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
-          <div className="w-16 h-16 rounded-full border-2 border-[#c9a76b] flex items-center justify-center mb-5 shadow-[0_0_15px_rgba(201,167,107,0.35)]">
-            <CheckCircle2 size={32} className="text-[#c9a76b]" />
-          </div>
-          <h2 className="text-xl text-[#e0d5ba] tracking-widest font-bold mb-1">進度已保存</h2>
-          <p className="text-gray-400 text-xs mb-10">已完成《{poem.title}》探索，收藏與典藏功能已開啟</p>
-          
-          <button 
-            onClick={onComplete}
-            className="ink-button clickable-hotspot px-12 py-3 rounded-md tracking-widest text-xs font-bold"
-          >
-            返回首頁
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+            const [showMenu, setShowMenu] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, sfx: true });
+            const [confirmReset, setConfirmReset] = useState(false); 
+            const [toastMessage, setToastMessage] = useState('');
+            const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
+
+            const touchStartX = useRef(0);
+            const touchEndX = useRef(0);
+
+            useEffect(() => {
+                const handleContextMenu = (e) => e.preventDefault();
+                window.addEventListener('contextmenu', handleContextMenu);
+                return () => window.removeEventListener('contextmenu', handleContextMenu);
+            }, []);
+
+            const triggerToast = (msg) => {
+                setToastMessage(msg);
+                setTimeout(() => setToastMessage(''), 3000);
+            };
+
+            const startGame = () => {
+                setCurrentPage('loading');
+                setTimeout(() => setCurrentPage('home'), 2200);
+            };
+
+            const openPoem = (id) => {
+                if (unlockedPoems.includes(id)) {
+                    setCurrentPoemId(id);
+                    setCurrentPage('game'); // 只導向遊戲頁面，不跳轉閱讀
+                    const poemObj = POEMS.find(p => p.id === id);
+                    if (poemObj && audioSettings.bgm) {
+                        setTimeout(() => triggerToast(`🎧 正在播放背景音效：${poemObj.ambience}`), 1000);
+                    }
+                } else {
+                    triggerToast("此詩篇尚未解鎖，請先完成前置章節。");
+                }
+            };
+
+            const handlePoemComplete = (id) => {
+                const currentIndex = POEMS.findIndex(p => p.id === id);
+                if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
+                    const nextId = POEMS[currentIndex + 1].id;
+                    if (!unlockedPoems.includes(nextId)) {
+                        setUnlockedPoems([...unlockedPoems, nextId]);
+                        setTimeout(() => triggerToast(`✨ 恭喜解鎖新篇章：《${POEMS[currentIndex + 1].title}》！`), 800);
+                    }
+                }
+                setCurrentPage('home');
+            };
+
+            const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
+            const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; };
+            const handleTouchEnd = () => {
+                const diff = touchStartX.current - touchEndX.current;
+                if (Math.abs(diff) > 80) { 
+                    if (diff > 0 && homeTab === 'game') { setHomeTab('reading'); triggerToast("切換至：閱讀模式"); } 
+                    else if (diff < 0 && homeTab === 'reading') { setHomeTab('game'); triggerToast("切換至：探索模式"); }
+                }
+            };
+
+            const getCardFontClasses = () => {
+                if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
+                if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
+                return { title: 'text-sm', author: 'text-[10px]', info: 'text-[9px]' };
+            };
+
+            const getReadingFontClass = () => {
+                if (fontSize === 'sm') return 'text-sm leading-relaxed';
+                if (fontSize === 'lg') return 'text-lg md:text-xl leading-loose';
+                return 'text-base leading-relaxed'; 
+            };
+
+            if (currentPage === 'start') {
+                return (
+                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center animate-fade-in" style={{ backgroundImage: "url('./Start.png')" }}>
+                        <div className="absolute inset-0 bg-black/10 backdrop-blur-[0.5px]"></div>
+                        <div className="relative z-10 flex flex-col items-center w-full"><div className="h-[50dvh]"></div><StartButton onClick={startGame} /></div>
+                    </div>
+                );
+            }
+
+            if (currentPage === 'loading') {
+                return (
+                    <div className="app-container bg-cover bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./Loading.png')" }}>
+                        <div className="absolute top-1/4 flex flex-col items-center z-10">
+                            <div className="relative w-28 h-28 flex items-center justify-center mt-20">
+                                <div className="absolute inset-0 border-4 border-gray-800 rounded-full border-t-transparent border-l-transparent animate-spin-slow opacity-85" style={{ filter: 'blur(1px)' }}></div>
+                                <div className="absolute inset-2.5 border-2 border-gray-600 rounded-full border-b-transparent animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }}></div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (currentPage === 'home') {
+                const cardFonts = getCardFontClasses();
+                return (
+                    <div className="app-container bg-[#0f0e0c] flex flex-col justify-between animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+                        <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "url('./Game.png')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+                        
+                        <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
+                            <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">詩境遊<span className="text-[10px] text-red-800 ml-1 font-bold">印</span></h1>
+                            <div className="text-[10px] text-gray-500 tracking-widest uppercase">{homeTab === 'game' ? '探索篇章' : '典藏閱讀'}</div>
+                        </header>
+
+                        <div className="flex-1 overflow-y-auto px-6 py-4 relative z-10 scrollbar-hide">
+                            {homeTab === 'game' ? (
+                                <>
+                                    <div className="mb-4">
+                                        <p className="text-[#c9a76b] text-base tracking-widest">探索詩境之美</p>
+                                        <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
+                                    </div>
+                                    <h3 className="text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
+                                    <div className="space-y-3.5 mb-10">
+                                        {POEMS.map((poem, idx) => {
+                                            const isUnlocked = unlockedPoems.includes(poem.id);
+                                            const isCompleted = isUnlocked && poem.hotspots.length > 0;
+                                            return (
+                                                <div key={poem.id} onClick={() => openPoem(poem.id)} className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
+                                                    <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
+                                                        {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
+                                                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                                                        </div>
+                                                        {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
+                                                    </div>
+                                                    <div className="px-2">
+                                                        {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
+                                                         isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
+                                                         <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="mb-4">
+                                        <p className="text-[#c9a76b] text-base tracking-widest">典藏卷軸</p>
+                                        <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">溫故知新，品味已解鎖的文學經典</p>
+                                    </div>
+                                    <div className="space-y-3.5 mb-10">
+                                        {POEMS.filter(p => unlockedPoems.includes(p.id)).map((poem) => (
+                                            <div key={poem.id} onClick={() => setReadingPoem(poem)} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
+                                                <div>
+                                                    <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
+                                                    <p className={`${cardFonts.author} text-gray-500`}>{poem.author}</p>
+                                                </div>
+                                                <i className="fa-solid fa-book-open text-[#c9a76b] opacity-80"></i>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {readingPoem && (
+                            <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
+                                <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
+                                    <button onClick={() => setReadingPoem(null)} className="p-2 clickable-hotspot"><i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i></button>
+                                    <div className="text-center"><h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2><p className="text-[10px] text-gray-500">{readingPoem.author}</p></div>
+                                    <div className="w-8"></div> 
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
+                                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
+                                    <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6">
+                                        {readingPoem.fullText && readingPoem.fullText.length > 0 ? readingPoem.fullText.map((line, idx) => <p key={idx} className={`${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>{line}</p>) : <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showMenu && (
+                            <div className="absolute inset-0 z-50 bg-[#080807] flex flex-col animate-fade-in overflow-hidden pointer-events-auto">
+                                <div className="flex items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]">
+                                    <button onClick={() => setShowMenu(false)} className="p-2 clickable-hotspot"><i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i></button>
+                                    <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold ml-4">雅士成就</h2>
+                                </div>
+                                <div className="flex-1 p-5 overflow-y-auto scrollbar-hide">
+                                    <div className="flex flex-col items-center justify-center mt-4 mb-8">
+                                        <div className="w-16 h-16 rounded-full border border-[#c9a76b] flex items-center justify-center mb-3 bg-[#141210] shadow-[0_0_15px_rgba(201,167,107,0.15)]">
+                                            <i className="fa-solid fa-award text-[#c9a76b] text-3xl"></i>
+                                        </div>
+                                        <h3 className="text-sm text-[#e0d5ba] tracking-widest font-bold">無名詩客</h3>
+                                        <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{unlockedPoems.length * 10} 點</p>
+                                    </div>
+                                    
+                                    <div className="pt-4 border-t border-[#2d281f] mt-6">
+                                        <h4 className="text-xs text-[#c9a76b] border-l border-[#c9a76b] pl-2 tracking-widest uppercase mb-3">實體文創集章冊</h4>
+                                        <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">完成指定篇章探索，即可自動集得專屬古風印鑑。<br/><span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 實體連動：</span>集滿指定數量，未來可於聯名書店或藝文空間兌換實體「水墨拓印紀念明信片」！</p>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {/* 示範印鑑：蒹葭 */}
+                                            <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('jianjia') ? 'border-red-800/40 text-red-800' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
+                                                <div className="w-10 h-10 rounded-sm border-[3px] border-double border-current flex items-center justify-center text-[15px] font-bold leading-none select-none relative overflow-hidden transform -rotate-3">
+                                                    蒹
+                                                </div>
+                                                <span className="text-[9px] mt-1.5 font-bold">白露印</span>
+                                            </div>
+                                            {/* 示範印鑑：涉江 */}
+                                            <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('shejiang') ? 'border-red-800/40 text-red-800' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
+                                                <div className="w-10 h-10 rounded-sm border-[3px] border-solid border-current flex items-center justify-center text-[15px] font-bold leading-none select-none relative overflow-hidden transform rotate-6">
+                                                    涉
+                                                </div>
+                                                <span className="text-[9px] mt-1.5 font-bold">楚辭印</span>
+                                            </div>
+                                            {/* 示範印鑑：齊桓 */}
+                                            <div className={`flex flex-col items-center justify-center p-3 rounded-lg border bg-[#141210]/60 ${unlockedPoems.includes('qihuan') ? 'border-red-800/40 text-red-800' : 'border-[#1a1714] text-gray-700 opacity-30'}`}>
+                                                <div className="w-10 h-10 rounded-full border-[2px] border-dashed border-current flex items-center justify-center text-[14px] font-bold leading-none select-none relative overflow-hidden">
+                                                    齊
+                                                </div>
+                                                <span className="text-[9px] mt-1.5 font-bold">宣王印</span>
+                                            </div>
+                                        </div>
+                                        <div className="mt-6 p-2.5 rounded border border-[#2d281f]/60 bg-[#161411]/50 text-center flex items-center justify-center gap-1.5">
+                                            <div className="w-2 h-2 rounded-full bg-green-700/80 animate-pulse"></div>
+                                            <span className="text-[9px] text-gray-400 tracking-widest font-bold">Supabase 雲端數據連線預備中</span>
+                                        </div>
+                                    </div>
+                                    <div className="h-10"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showSettings && (
+                            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
+                                <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-[85%] max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+                                    <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
+                                    <div className="space-y-4 mb-6 px-1">
+                                        <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, bgm: !audioSettings.bgm})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+                                        <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, sfx: !audioSettings.sfx})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+                                        <div className="pt-2">
+                                            <div className="flex justify-between items-center mb-1.5"><span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span><span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span></div>
+                                            <div className="flex gap-2.5">{['sm', 'md', 'lg'].map(sz => <button key={sz} onClick={() => setFontSize(sz)} className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}>{sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}</button>)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-3">
+                                        <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 底部導航欄 (極致壓縮高度設計) */}
+                        <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col pt-1 pb-1 border-t border-[#2d281f]/40">
+                            <div className="flex justify-around items-center px-4 w-full h-12">
+                                <InkRingButton iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
+                                <InkRingButton iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
+                                <InkRingButton iconClass="fa-solid fa-award" active={showMenu} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
+                                <InkRingButton iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
+                            </div>
+                        </div>
+
+                        {toastMessage && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-[#161411]/95 border border-[#c9a76b]/40 py-2 px-4 rounded-md text-[11px] text-[#e0d5ba] tracking-wider shadow-xl animate-fade-in text-center max-w-[80dvw]">{toastMessage}</div>}
+                    </div>
+                );
+            }
+
+            if (currentPage === 'game') {
+                const poem = POEMS.find(p => p.id === currentPoemId);
+                return <GamePlayArea poem={poem} onBack={() => setCurrentPage('home')} onComplete={() => handlePoemComplete(poem.id)} triggerToast={triggerToast} />;
+            }
+            return null;
+        }
+
+        function GamePlayArea({ poem, onBack, onComplete, triggerToast }) {
+            const [currentStep, setCurrentStep] = useState(0);
+            const [mistakes, setMistakes] = useState({}); 
+            const [isShaking, setIsShaking] = useState(false);
+            const [showCompletion, setShowCompletion] = useState(false);
+            const [clickedPos, setClickedPos] = useState(null); 
+            const [showSubtitle, setShowSubtitle] = useState(false); 
+
+            const handleHotspotClick = (index, e) => {
+                e.stopPropagation();
+                if (index === currentStep) {
+                    const rect = e.currentTarget.getBoundingClientRect(); const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: true });
+                    setTimeout(() => { if (currentStep + 1 >= poem.hotspots.length) setShowCompletion(true); else setCurrentStep(currentStep + 1); setClickedPos(null); }, 700);
+                } else if (index > currentStep) {
+                    setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                    setIsShaking(true); setTimeout(() => setIsShaking(false), 400);
+                    const rect = e.currentTarget.getBoundingClientRect(); const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: false });
+                    setTimeout(() => setClickedPos(null), 400);
+                }
+            };
+
+            const handleBackgroundClick = (e) => {
+                setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                setIsShaking(true); setTimeout(() => setIsShaking(false), 400);
+                const parentRect = e.currentTarget.getBoundingClientRect();
+                setClickedPos({ x: e.clientX - parentRect.left, y: e.clientY - parentRect.top, success: false });
+                setTimeout(() => setClickedPos(null), 400);
+            };
+
+            return (
+                <div className={`app-container bg-black overflow-hidden animate-fade-in ${isShaking ? 'animate-shake' : ''}`}>
+                    <div className="absolute inset-0 w-full h-full cursor-pointer animate-fade-in pointer-events-auto" onClick={handleBackgroundClick}>
+                        <img src={poem.bgImage} alt="Backdrop" className="w-full h-full object-cover opacity-65" />
+                    </div>
+                    
+                    <div className="absolute top-0 left-0 w-full py-1.5 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/35 backdrop-blur-[1px]">
+                        <button onClick={onBack} className="pointer-events-auto p-1.5 clickable-hotspot"><i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i></button>
+                        <div className="text-center drop-shadow-lg"><h2 className="text-sm text-[#e0d5ba] tracking-[0.25em] font-medium">{poem.title}</h2><p className="text-[9px] text-gray-400 font-light">— {poem.author} —</p></div>
+                        <button onClick={() => { setShowSubtitle(!showSubtitle); triggerToast(showSubtitle ? "提示已隱藏" : "提示已開啟"); }} className="pointer-events-auto p-1.5 clickable-hotspot">
+                            <i className={`fa-solid ${showSubtitle ? 'fa-eye text-[#c9a76b]' : 'fa-eye-slash text-gray-400'} text-sm`}></i>
+                        </button>
+                    </div>
+
+                    {poem.hotspots.map((spot, index) => {
+                        const isCurrentTarget = index === currentStep; const isCompleted = index < currentStep; const mistakeCount = mistakes[index] || 0;
+                        const needsHint = isCurrentTarget && mistakeCount >= 2;
+                        return (
+                            <div key={spot.id} className={`absolute w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center clickable-hotspot transition-opacity duration-500 ${isCompleted ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} style={{ left: `${spot.x}%`, top: `${spot.y}%`, zIndex: 10 }} onClick={(e) => handleHotspotClick(index, e)}>
+                                <div className={`w-3.5 h-3.5 rounded-full transition-all duration-500 ${needsHint ? 'border border-[#c9a76b] hint-pulse bg-[#c9a76b]/20' : 'bg-transparent'} ${isCurrentTarget && mistakeCount === 1 ? 'bg-white/10' : ''}`}></div>
+                            </div>
+                        );
+                    })}
+
+                    {clickedPos && <div className={`absolute rounded-full pointer-events-none z-30 ripple-effect ${clickedPos.success ? 'border-2 border-[#c9a76b] bg-[#c9a76b]/25 shadow-[0_0_12px_#c9a76b]' : 'border-2 border-red-500/40 bg-red-500/15'}`} style={{ left: clickedPos.x, top: clickedPos.y, width: '24px', height: '24px', marginLeft: '-12px', marginTop: '-12px' }} />}
+
+                    <div className="absolute bottom-20 left-0 w-full px-4 text-center pointer-events-none z-30">
+                        {currentStep < poem.hotspots.length && (
+                            <div className="h-10 flex items-center justify-center pointer-events-none">
+                                {showSubtitle ? <p className="text-sm text-[#e0d5ba] tracking-widest font-bold bg-black/45 backdrop-blur-[2px] py-1.5 px-4 rounded-full inline-block drop-shadow-md">{poem.hotspots[currentStep].label}</p> : <p className="text-[10px] text-gray-400/80 tracking-widest italic bg-black/45 backdrop-blur-[2px] py-1.5 px-4 rounded-full inline-block">〔 請於畫面中點選對應意象 〕</p>}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 遊戲內極致壓縮導航 */}
+                    <div className="absolute bottom-0 left-0 w-full bg-[#0a0a09]/95 flex flex-col pt-1 pb-1 border-t border-[#2d281f]/40 z-20">
+                        <div className="flex justify-around items-center px-4 w-full h-12">
+                            <InkRingButton iconClass="fa-solid fa-arrow-left" active={false} onClick={onBack} label="返回" />
+                            <div className="flex flex-col items-center">
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full border border-[#2d281f]/50 relative bg-[#131210]"><span className="text-[#c9a76b] font-bold text-[11px] tracking-widest">{currentStep} / {poem.hotspots.length}</span></div>
+                                <span className="text-[9px] mt-1 tracking-wider text-gray-500">進度</span>
+                            </div>
+                            <InkRingButton iconClass="fa-solid fa-rotate-right" active={false} onClick={() => {setCurrentStep(0); setMistakes({}); triggerToast("重置本篇進度");}} label="重置" />
+                        </div>
+                    </div>
+
+                    {showCompletion && (
+                        <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center animate-fade-in pointer-events-auto">
+                            <div className="w-16 h-16 rounded-full border-2 border-[#c9a76b] flex items-center justify-center mb-5 shadow-[0_0_15px_rgba(201,167,107,0.35)]"><i className="fa-solid fa-circle-check text-[#c9a76b] text-3xl"></i></div>
+                            <h2 className="text-xl text-[#e0d5ba] tracking-widest font-bold mb-1">典藏入卷</h2>
+                            <p className="text-gray-400 text-xs mb-10">已完成《{poem.title}》實機探索</p>
+                            <button onClick={onComplete} className="ink-button clickable-hotspot px-12 py-3 rounded-md tracking-widest text-xs font-bold">返回卷軸</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // 啟動 React
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
