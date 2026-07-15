@@ -107,7 +107,7 @@
 .game-frame {
   height: 100vh;
   max-width: 100%;
-  aspect-ratio: 9 / 16; /* 根據 start.png 實際比例調整 */
+  aspect-ratio: 9 / 16; /* 根據 start圖 實際比例調整 */
   position: relative;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
   overflow: hidden;
@@ -595,7 +595,7 @@ const POEMS = [
   }
 ];
 
-// 當 start.png 畫面載入完成後，立刻開始後台下載
+// 當 start圖 畫面載入完成後，立刻開始後台下載
 window.addEventListener('DOMContentLoaded', () => {
   preloadAssets();
   preloadFonts();
@@ -603,7 +603,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function preloadAssets() {
   const imagesToPreload = [
-    'loading.png',
+    'loading.webp', ‘loading icon.webp’
     'game.png', 
     bgImage,
     // ...其他遊戲介面與印章 PNG
@@ -815,7 +815,7 @@ const loadAllAssets = async () => {
     // 2. 合併基礎圖片與篇章圖片
     const imagesToLoad = [
         './Game.png',
-        './Loading.png',
+        './Loading.webp', './Loading icon.webp',
         ...poemImages // 使用展開運算子直接加入所有篇章圖片
     ];
 
@@ -895,32 +895,49 @@ const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
                 return 'text-base leading-relaxed'; 
             };
 
-            if (currentPage === 'start') {
-                return (
-                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./Start.png')" }}>
-                       {/* 隱藏式熱區按鈕：透明、無邊框，透過 absolute 覆蓋在 Start.png 的按鈕位置上 */}
-                       <button 
-                        onClick={startGame}
-                        aria-label="開始遊戲"
-                        className="absolute bottom-[45%] left-1/2 -translate-x-1/2 w-[30%] h-[12%] bg-red-500/50 border-none outline-none cursor-pointer clickable-hotspot z-20"
-                        style={{ WebkitTapHighlightColor: 'transparent' }}
-                        />
-                    </div>
-                );
-            }
+ if (currentPage === 'start') {
+    return (
+        <div 
+            className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" 
+            style={{ backgroundImage: "url('./Start.webp')" }}
+        >
+            {/* 包裹圖片的按鈕 */}
+            <button 
+                onClick={startGame}
+                aria-label="開始遊戲"
+                className="absolute bottom-[45%] left-1/2 -translate-x-1/2 w-[30%] h-[12%] flex items-center justify-center border-none outline-none bg-transparent cursor-pointer transition-transform duration-200 hover:scale-105 active:scale-95 z-20"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+            >
+                <img 
+                    src="./startbtn.webp" 
+                    alt="開始按鈕" 
+                    className="w-full h-full object-contain pointer-events-none" 
+                />
+            </button>
+        </div>
+    );
+}
 
-            if (currentPage === 'loading') {
-                return (
-                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./Loading.png')" }}>
-                        <div className="absolute top-1/4 flex flex-col items-center z-10">
-                            <div className="relative w-28 h-28 flex items-center justify-center mt-20">
-                                <div className="absolute inset-0 border-4 border-gray-800 rounded-full border-t-transparent border-l-transparent animate-spin-slow opacity-85" style={{ filter: 'blur(1px)' }}></div>
-                                <div className="absolute inset-2.5 border-2 border-gray-600 rounded-full border-b-transparent animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }}></div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+if (currentPage === 'loading') {
+    return (
+        <div 
+            className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" 
+            style={{ backgroundImage: "url('./Loading.webp')" }}
+        >
+            <div className="absolute top-1/4 flex flex-col items-center z-10">
+                <div className="relative w-28 h-28 flex items-center justify-center mt-20">
+                    {/* 使用你的 loading icon.webp 代替原本的 CSS 圓圈，並加上自轉動畫 */}
+                    <img 
+                        src="./loading icon.webp" 
+                        alt="載入中" 
+                        className="w-full h-full object-contain animate-spin-slow pointer-events-none opacity-85"
+                        style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} // 選擇性加入：讓圖標稍微有立體陰影
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
 
             if (currentPage === 'home') {
                 const cardFonts = getCardFontClasses();
