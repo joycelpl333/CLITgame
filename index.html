@@ -147,11 +147,11 @@
 
         function preloadAssets() {
           const imagesToPreload = [
-            './Start.webp',
-            './Startbtn.webp',
-            './Loading.webp',
-            './Loading icon.webp',
-            './Game.webp'
+            './start.webp',
+            './startbtn.webp',
+            './loading.webp',
+            './loading-icon.webp',
+            './game.webp'
           ];
           imagesToPreload.forEach(src => {
             const img = new Image();
@@ -351,9 +351,9 @@ const SM = new SoundManager();
                         const minTimePromise = new Promise(resolve => setTimeout(resolve, 1500));
                         
                         const imagesToLoad = [
-                            './Game.webp',
-                            './Loading.webp', 
-                            './Loading icon.webp',
+                            './game.webp',
+                            './loading.webp', 
+                            './loading-icon.webp',
                             ...poemImages 
                         ];
 
@@ -430,13 +430,13 @@ const SM = new SoundManager();
             // --- 頁面路由控制 (修正原本白屏的 Render 邏輯) ---
             if (currentPage === 'start') {
                 return (
-                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./Start.webp')" }}>
+                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./start.webp')" }}>
                         {/* 將原本沒用到的 StartButton 完美整合進來，或保留你的圖片按鈕 */}
                         <div className="absolute bottom-[25%] z-20">
                             <StartButton onClick={startGame} />
                         </div>
                         {/* 你的圖片開始按鈕備份：
-                        <button onClick={startGame} className="absolute bottom-[25%] w-[35%] h-[8%] bg-contain bg-no-repeat bg-center hover:scale-105 active:scale-95 transition-transform z-20" style={{ backgroundImage: "url('./Startbtn.webp')" }} />
+                        <button onClick={startGame} className="absolute bottom-[25%] w-[35%] h-[8%] bg-contain bg-no-repeat bg-center hover:scale-105 active:scale-95 transition-transform z-20" style={{ backgroundImage: "url('./startbtn.webp')" }} />
                         */}
                     </div>
                 );
@@ -444,10 +444,10 @@ const SM = new SoundManager();
 
             if (currentPage === 'loading') {
                 return (
-                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./Loading.webp')" }}>
+                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./loading.webp')" }}>
                         <div className="absolute top-1/4 flex flex-col items-center z-10">
                             <div className="relative w-28 h-28 flex items-center justify-center mt-20">
-                                <img src="./Loading icon.webp" alt="載入中" className="w-full h-full object-contain animate-spin-slow pointer-events-none opacity-85" style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} />
+                                <img src="./loading-icon.webp" alt="載入中" className="w-full h-full object-contain animate-spin-slow pointer-events-none opacity-85" style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} />
                             </div>
                         </div>
                     </div>
@@ -458,7 +458,7 @@ const SM = new SoundManager();
                 const cardFonts = getCardFontClasses();
                 return (
                     <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-                        <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "url('./Game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+                        <div className="absolute inset-0 opacity-15 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
                         
                         <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
                             <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
