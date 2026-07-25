@@ -594,7 +594,7 @@ if (currentPage === 'home') {
                     <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
                         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                         <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6">
-                            {readingPoem.fullText && readingPoem.fullText.length > 0 ? readingPoem.fullText.map((line, idx) => <p key={idx} className={`${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>{line}</p>) : <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>}
+                            {readingPoem.fullText && readingPoem.fullText.length > 0 ? readingPoem.fullText.map((line, idx) => <p key={idx} className={`whitespace-pre-line ${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>{line}</p>) : <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>}
                         </div>
                     </div>
                 </div>
