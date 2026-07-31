@@ -42,6 +42,19 @@
             -webkit-user-select: none;
             -webkit-touch-callout: none; 
         }
+.viewport-bg-blur {
+    position: absolute;
+    top: -20%; 
+    width: 100%; height: 120%;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(12px) brightness(0.65); /* 12px 毛玻璃 + 微幅調暗，突出中央畫面 */
+    opacity: 0.8;
+    transition: background-image 0.8s ease-in-out, opacity 0.5s ease-in-out;
+    pointer-events: none;
+    z-index: 0; /* 位於最底層 */
+}
         .viewport-container {
             width: 100vw;
             height: 100vh;
@@ -58,7 +71,7 @@
             top: -50%; left: -50%; width: 200%; height: 200%;
             background: radial-gradient(circle at 50% 50%, rgba(35, 48, 60, 0.4), transparent 60%);
             animation: ambientBreathing 12s ease-in-out infinite alternate;
-            pointer-events: none;
+            pointer-events: none;z-index: 1;
         }
         @keyframes ambientBreathing {
             0% { transform: translate(0, 0) scale(1); opacity: 0.3; }
@@ -69,9 +82,9 @@
             width: 100%;
             max-width: calc(100vh * (9 / 16));
             position: relative;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
             overflow: hidden;
-            background-color: #0d0c0a;
+            background-color: #0d0c0a; z-index: 2;
         }
         .app-container {
             height: 100%; width: 100%;
@@ -486,7 +499,6 @@ function App() {
 
     const cardFonts = getCardFontClasses();
 
-    // --- 頁面路由控制 ---
     
     // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換 homeTab 時按鈕與印章變大/閃爍）
     const renderPreloadContainer = () => (
@@ -511,7 +523,20 @@ function App() {
         </div>
     );
 
-            // --- 頁面路由控制 ---
+// 🌟 1. 自動根據當前頁面與關卡取得動態背景圖片路徑
+    const getCurrentBgImage = () => {
+        if (currentPage === 'start') return './start.webp';
+        if (currentPage === 'loading') return './loading.webp';
+        if (currentPage === 'game' && currentPoemId) {
+            const currentPoem = POEMS.find(p => p.id === currentPoemId);
+            if (currentPoem && currentPoem.bgImage) return currentPoem.bgImage;
+        }
+        return './game.webp'; // home 頁面或預設背景
+    };
+
+    const activeBgImage = getCurrentBgImage();
+// 🌟 2. 渲染邏輯整合
+    const renderPageContent = () => {
 if (currentPage === 'start') {
         return (
             <>
@@ -906,7 +931,25 @@ if (currentPage === 'start') {
               }} onComplete={() => handlePoemComplete(poem.id)} triggerToast={triggerToast} />;
             }
             return null;
-        }
+        };
+return (
+            <div className="viewport-container">
+                {/* 動態毛玻璃背景 */}
+                <div 
+                    className="viewport-bg-blur"
+                    style={{ backgroundImage: `url('${activeBgImage}')` }}
+                />
+
+                {/* 隱形預載容器 */}
+                {renderPreloadContainer()}
+
+                {/* 中央 9:16 畫框 */}
+                <div className="game-frame">
+                    {renderPageContent()}
+                </div>
+            </div>
+        );
+    }
 
         function GamePlayArea({ poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound }) {
             const [currentStep, setCurrentStep] = useState(0);
@@ -978,7 +1021,7 @@ if (currentPage === 'start') {
                     onClick={handleGlobalClick}
                 >
                     <div className="absolute inset-0 w-full h-full cursor-pointer animate-fade-in pointer-events-auto" onClick={handleBackgroundClick}>
-                        <img src={poem.bgImage} alt="Backdrop" className="w-full h-full object-cover opacity-100" />
+                        <img src={poem.bgImage} alt="Backdrop" className="w-full h-full opacity-100" />
                     </div>
                     
                     <div className="absolute top-0 left-0 w-full py-2 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/55 backdrop-blur-[1px]">
@@ -1250,11 +1293,7 @@ if (currentPage === 'start') {
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(
-            <div className="viewport-container">
-                <div className="game-frame">
-                    <App />
-                </div>
-            </div>
+            <App />
         );
     </script>
 </body>
