@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>詩境遊 - 沉浸式學習文學</title>
     
+    <!-- 預載關鍵圖片資源，確保最高優先級下載 -->
+    <link rel="preload" as="image" href="./loading.webp">
+    <link rel="preload" as="image" href="./start.webp">
+    <link rel="preload" as="image" href="./startbtn.webp">
+
     <!-- 引入 Tailwind CSS 進行國風排版 -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -37,7 +42,6 @@
             -webkit-user-select: none;
             -webkit-touch-callout: none; 
         }
-        /* 最外層容器，確保在桌面版置中與 16:9 比例 */
         .viewport-container {
             width: 100vw;
             height: 100vh;
@@ -77,7 +81,6 @@
         img { user-drag: none; -webkit-user-drag: none; pointer-events: none; }
         button, .clickable-hotspot { pointer-events: auto; }
         
-        /* 國風按鈕與特效 */
         .start-btn {
             font-size: 15px; padding: 13px 44px; border-radius: 12px;
             border: 1px solid rgba(255, 215, 120, 0.55);
@@ -88,17 +91,6 @@
             box-shadow: 0 0 25px rgba(255, 215, 120, 0.1);
         }
         .start-btn.pressed { transform: scale(0.92); }
-        .custom-ripple {
-            position: absolute; width: 20px; height: 20px;
-            background: rgba(255, 215, 120, 0.45); border-radius: 50%;
-            left: 50%; top: 50%; transform: translate(-50%, -50%);
-            pointer-events: none;
-            animation: custom-ripple-expand 0.6s ease-out forwards;
-        }
-        @keyframes custom-ripple-expand {
-            0% { transform: translate(-50%, -50%) scale(0); opacity: 0.8; }
-            100% { transform: translate(-50%, -50%) scale(12); opacity: 0; }
-        }
         .ink-button { background: rgba(13, 12, 10, 0.9); border: 1px solid #c9a76b; color: #e0d5ba; transition: all 0.3s ease; }
         .ink-button:active { transform: scale(0.95); }
         
@@ -118,28 +110,51 @@
         .hint-pulse { animation: pulse-glow 2s infinite; }
         @keyframes ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(3.5); opacity: 0; } }
         .ripple-effect { animation: ripple 0.6s ease-out forwards; }
+        
+        /* 金色微粒爆發動畫 */
+        @keyframes particle-fly {
+            0% { transform: translate(-50%, -50%) translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; }
+        }
+        .golden-particle {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background: radial-gradient(circle, #fff6d6 0%, #c9a76b 100%);
+            box-shadow: 0 0 8px #c9a76b, 0 0 12px #ffffff;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 40;
+            animation: particle-fly 0.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        /* 淡入淡出轉場動畫 */
         @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fade-in 0.8s ease-in-out forwards; }
+        .animate-fade-in { animation: fade-in 0.3s ease-in-out forwards; }
+
+        @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+        .animate-fade-out { animation: fade-out 0.3s ease-in-out forwards; }
+
+        /* 開始按鈕漸入動畫 */
+        @keyframes btnFadeIn {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .animate-btn-fade-in { animation: btnFadeIn 0.8s ease-out forwards; }
+
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .fullText { user-select: text !important; -webkit-user-select: text !important; cursor: text; }
-        /* 將原本要加在 game-frame 的濾鏡獨立出來 */
-        .menu-filter {filter: contrast(1.05) brightness(0.9) saturate(1.1); /* 替換成你原本設定的濾鏡數值 */
-    transition: filter 0.5s ease-in-out;
-}
     </style>
 </head>
 <body>
     <div id="root"></div>
-<script src="poems.js"></script>
+    <script src="poems.js"></script>
     <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;"></div>
     
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
 
-
-
-        // 修正預載函式 (大小寫對齊、移除了未定義的 bgImage 變數)
         window.addEventListener('DOMContentLoaded', () => {
           preloadAssets();
           preloadFonts();
@@ -147,9 +162,9 @@
 
         function preloadAssets() {
           const imagesToPreload = [
+            './loading.webp',
             './start.webp',
             './startbtn.webp',
-            './loading.webp',
             './loading-icon.webp',
             './game.webp'
           ];
@@ -172,12 +187,12 @@
           ytPlayer = new YT.Player('yt-player', {
             height: '0', width: '0', videoId: '11pvOw2DZ58',
             playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '11pvOw2DZ58' },
-      events: {
-      'onReady': (event) => {
-        event.target.playVideo();
-        event.target.setVolume(100); // 預設滿音量
-      }
-    }
+            events: {
+              'onReady': (event) => {
+                window.ytPlayer = event.target;
+                event.target.setVolume(100);
+              }
+            }
           });
         }
 
@@ -191,8 +206,6 @@
             this.ambientWind = new Audio('assets/audio/ambient-wind.mp3');
             this.ambientWind.loop = true;
             this.ambientWind.volume = 0.7;
-
-// 用來存放目前篇章的專屬環境音
             this.currentAmbience = null;
           }
           playSFX(name, volume = 1) {
@@ -205,39 +218,32 @@
           startAmbient() {
             this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
           }
-// 【核心新增】進入遊戲篇章：YouTube 降音量至 20，並播放篇章音效 (音量 0.9)
-  enterGameMode(audioSrc) {
-    // 1. YouTube 降音 (YT API 的 setVolume 範圍是 0 ~ 100，所以 0.2 對應 20)
-    if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.setVolume) {
-      ytPlayer.setVolume(20);
-    }
+          enterGameMode(audioSrc) {
+            if (window.ytPlayer && window.ytPlayer.setVolume) {
+              window.ytPlayer.setVolume(20);
+            }
+            if (audioSrc) {
+              if (this.currentAmbience) {
+                this.currentAmbience.pause();
+              }
+              this.currentAmbience = new Audio(audioSrc);
+              this.currentAmbience.loop = true;
+              this.currentAmbience.volume = 0.9; 
+              this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
+            }
+          }
+          exitGameMode() {
+            if (window.ytPlayer && window.ytPlayer.setVolume) {
+              window.ytPlayer.setVolume(100);
+            }
+            if (this.currentAmbience) {
+              this.currentAmbience.pause();
+              this.currentAmbience = null;
+            }
+          }
+        }
 
-    // 2. 播放篇章環境音 (音量設為 0.9，符合你要求的 0.8 - 1)
-    if (audioSrc) {
-      if (this.currentAmbience) {
-        this.currentAmbience.pause();
-      }
-      this.currentAmbience = new Audio(audioSrc);
-      this.currentAmbience.loop = true;
-      this.currentAmbience.volume = 0.9; 
-      this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
-    }
-  }
-
-  // 【核心新增】返回主畫面：YouTube 回復 100 音量，停止篇章環境音
-  exitGameMode() {
-    if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.setVolume) {
-      ytPlayer.setVolume(100);
-    }
-
-    if (this.currentAmbience) {
-      this.currentAmbience.pause();
-      this.currentAmbience = null;
-    }
-  }
-}
-
-const SM = new SoundManager();
+        const SM = new SoundManager();
         
         function useLocalStorage(key, initialValue) {
             const [storedValue, setStoredValue] = useState(() => {
@@ -256,29 +262,6 @@ const SM = new SoundManager();
             return [storedValue, setValue];
         }
 
-        function StartButton({ onClick }) {
-            const [ripples, setRipples] = useState([]);
-            const [isPressed, setIsPressed] = useState(false);
-
-            const handleClick = (e) => {
-                setIsPressed(true);
-                setTimeout(() => setIsPressed(false), 100); 
-                const newRipple = { id: Date.now() };
-                setRipples(prev => [...prev, newRipple]);
-                setTimeout(() => setRipples(prev => prev.filter(r => r.id !== newRipple.id)), 600);
-                setTimeout(onClick, 150);
-            };
-
-            return (
-                <button className={`start-btn clickable-hotspot ${isPressed ? 'pressed' : ''}`} onClick={handleClick}>
-                    開始
-                    {ripples.map(r => <span key={r.id} className="custom-ripple" />)}
-                </button>
-            );
-        }
-
-
-
         const preloadImage = (src) => {
             return new Promise((resolve) => {
                 const img = new Image();
@@ -296,131 +279,260 @@ const SM = new SoundManager();
             return Promise.resolve();
         };
 
-        function App() {
-            const [currentPage, setCurrentPage] = useState('start'); 
-            const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
-            const [currentPoemId, setCurrentPoemId] = useState(null);
-            const [homeTab, setHomeTab] = useState('game'); 
-            const [readingPoem, setReadingPoem] = useState(null); 
-            const [showMenu, setShowMenu] = useState(false);
-            const [showSettings, setShowSettings] = useState(false);
-            const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, sfx: true });
-            const [confirmReset, setConfirmReset] = useState(false); 
-            const [toastMessage, setToastMessage] = useState('');
-            const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
+function App() {
+    const [currentPage, setCurrentPage] = useState('start'); 
+    const [isLeavingStart, setIsLeavingStart] = useState(false); 
+    const [isLeavingLoading, setIsLeavingLoading] = useState(false); 
+    const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
+    const [currentPoemId, setCurrentPoemId] = useState(null);
+    const [homeTab, setHomeTab] = useState('game'); 
+    const [readingPoem, setReadingPoem] = useState(null); 
+    const [showMenu, setShowMenu] = useState(false);
+    
+    // 滾動容器的 Ref
+    const scrollContainerRef = useRef(null);
+    
+    // UI 預熱與預載狀態管理
+    const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
+    const [isPreloaded, setIsPreloaded] = useState(false);
 
-            const touchStartX = useRef(0);
-            const touchEndX = useRef(0);
-
-            const triggerToast = (msg) => {
-                setToastMessage(msg);
-                setTimeout(() => setToastMessage(''), 3000);
-            };
-
-            const startGame = () => {
-                if (window.ytPlayer && window.ytPlayer.playVideo) window.ytPlayer.playVideo();
-                SM.startAmbient();
-                SM.playSFX('click', 0.8);
-                setCurrentPage('loading'); 
-            };
-
-            // 修正：將變數大寫改為 POEMS，並正確關閉 useEffect 區塊
-            useEffect(() => {
-                if (currentPage === 'loading') {
-                    const loadAllAssets = async () => {
-                        const poemImages = POEMS
-                            .filter(p => p.bgImage && p.bgImage.trim() !== "")
-                            .map(p => p.bgImage);
-
-                        console.log("開始驗證與下載遊戲資源...");
-                        const minTimePromise = new Promise(resolve => setTimeout(resolve, 1500));
-                        
-                        const imagesToLoad = [
-                            './game.webp',
-                            './loading.webp', 
-                            './loading-icon.webp',
-                            ...poemImages 
-                        ];
-
-                        const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
-                        const fontPromise = checkFontsReady();
-                        const storagePromise = new Promise((resolve) => {
-                            try {
-                                const testKey = '__shijing_test__';
-                                window.localStorage.setItem(testKey, 'ok');
-                                window.localStorage.removeItem(testKey);
-                            } catch (e) { console.warn("LocalStorage 目前處於受限模式：", e); }
-                            resolve();
-                        });
-
-                        await Promise.all([imagePromise, fontPromise, storagePromise, minTimePromise]);
-                        console.log("所有資源準備就緒，進入遊戲主畫面！");
-                        setCurrentPage('home');
-                    };
-                    loadAllAssets();
-                }
-            }, [currentPage]);
-
-            const openPoem = (id) => {
-                if (unlockedPoems.includes(id)) {
-                    setCurrentPoemId(id);
-                    setCurrentPage('game');
-                    const poemObj = POEMS.find(p => p.id === id);
-                    if (poemObj) {
-            // 在這裡呼叫！會自動把 YouTube 壓低到 20%，並播放該篇章的 ambienceAudio
-            SM.enterGameMode(poemObj.ambienceAudio);
-
-            const ambienceName = poemObj.ambience || "意境音效";
-            setTimeout(() => triggerToast(`🎧 正在播放背景音效：${ambienceName}`), 1000);
+    // 當分頁切換時，滾動到頂部
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0;
         }
-                } else {
-                    triggerToast("此篇尚未解鎖，請先完成前置章節。");
-                }
-            };
+    }, [homeTab, showMenu, showSettings]);
 
-            const handlePoemComplete = (id) => {
-                const currentIndex = POEMS.findIndex(p => p.id === id);
-                if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
-                    const nextId = POEMS[currentIndex + 1].id;
-                    if (!unlockedPoems.includes(nextId)) {
-                        setUnlockedPoems([...unlockedPoems, nextId]);
-                        setTimeout(() => triggerToast(`✨ 恭喜解鎖新篇章：《${POEMS[currentIndex + 1].title}》！`), 800);
-                    }
-                }
-                setCurrentPage('home');
-            };
+    const [showSettings, setShowSettings] = useState(false);
+    const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, sfx: true });
+    const [confirmReset, setConfirmReset] = useState(false); 
+    const [toastMessage, setToastMessage] = useState('');
+    const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
 
-            const getCardFontClasses = () => {
-                if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
-                if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
-                return { title: 'text-sm', author: 'text-[10px]', info: 'text-[9px]' };
-            };
+    const triggerToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 3000);
+    };
 
-            const getReadingFontClass = () => {
-                if (fontSize === 'sm') return 'text-sm leading-relaxed';
-                if (fontSize === 'lg') return 'text-lg md:text-xl leading-loose';
-                return 'text-base leading-relaxed'; 
-            };
+    // 複製全文至剪貼簿函式
+    const handleCopyPoem = (poem) => {
+        if (!poem || !poem.fullText || poem.fullText.length === 0) {
+            triggerToast("⚠️ 無文字可供複製");
+            return;
+        }
+        
+        const textToCopy = `《${poem.title}》 ${poem.author}\n\n` + poem.fullText.join('\n');
 
-// --- 頁面路由控制 ---
-if (currentPage === 'start') {
-    return (
-        <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center animate-fade-in relative select-none" style={{ backgroundImage: "url('./start.webp')" }}>
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                triggerToast("📋 已複製全文至剪貼簿！");
+            }).catch(() => {
+                fallbackCopy(textToCopy);
+            });
+        } else {
+            fallbackCopy(textToCopy);
+        }
+    };
+
+    const fallbackCopy = (text) => {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            triggerToast("📋 已成功複製全文至剪貼簿！");
+        } catch (err) {
+            triggerToast("⚠️ 複製失敗，請手動選取文字");
+        }
+        document.body.removeChild(textArea);
+    };
+
+    // 🌟 1. 一進入 App (Start 頁面) 即開始背景預載
+    useEffect(() => {
+        const preloadAllAssets = async () => {
+            const poemImages = POEMS
+                .filter(p => p.bgImage && p.bgImage.trim() !== "")
+                .map(p => p.bgImage);
+
+            const imagesToLoad = [
+                './game.webp',
+                './loading.webp', 
+                './loading-icon.webp',
+                ...poemImages 
+            ];
+
+            const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
+            const fontPromise = checkFontsReady();
+            const storagePromise = new Promise((resolve) => {
+                try {
+                    const testKey = '__shijing_test__';
+                    window.localStorage.setItem(testKey, 'ok');
+                    window.localStorage.removeItem(testKey);
+                } catch (e) { console.warn("LocalStorage 目前處於受限模式：", e); }
+                resolve();
+            });
+
+            await Promise.all([imagePromise, fontPromise, storagePromise]);
             
-            {/* 使用你的圖片按鈕 startbtn.webp */}
-            <button 
-                onClick={startGame} 
-                className="absolute bottom-[50%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center hover:scale-105 active:scale-95 transition-transform z-20 clickable-hotspot" 
-                style={{ backgroundImage: "url('./startbtn.webp')" }} 
-            />
+            // 強制觸發排版計算 (Reflow) 並標記完成
+            setIsUIWarmedUp(true);
+            setIsPreloaded(true);
+        };
 
+        preloadAllAssets();
+    }, []);
+
+    // 🌟 2. 點擊開始按鈕
+    const startGame = () => {
+        const player = window.ytPlayer || ytPlayer;
+        if (player && typeof player.playVideo === 'function') {
+            try {
+                player.unMute();
+                player.setVolume(100);
+                player.playVideo();
+            } catch(e) {
+                console.log('BGM 播放受限或異常:', e);
+            }
+        }
+        
+        SM.startAmbient();
+        SM.playSFX('click', 0.8);
+
+        setIsLeavingStart(true);
+        setTimeout(() => {
+            // 若在 Start 頁面停留期間資產已預載完成，直接轉至 home；否則進入 loading 頁面等待
+            if (isPreloaded) {
+                setCurrentPage('home');
+            } else {
+                setCurrentPage('loading');
+            }
+        }, 300);
+    };
+
+    // 🌟 3. 保留 loading 頁面的獨立預載備案（當使用者極快點擊 Start 按鈕時執行）
+    useEffect(() => {
+        if (currentPage === 'loading') {
+            setIsLeavingLoading(false); // 重置狀態
+            const ensureLoaded = async () => {
+                const minTimePromise = new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 如果在 start 頁面還沒載完，在這裡確保全部載入
+                if (!isPreloaded) {
+                    const poemImages = POEMS
+                        .filter(p => p.bgImage && p.bgImage.trim() !== "")
+                        .map(p => p.bgImage);
+                    const imagesToLoad = ['./game.webp', './loading.webp', './loading-icon.webp', ...poemImages];
+                    await Promise.all([
+                        Promise.all(imagesToLoad.map(src => preloadImage(src))),
+                        checkFontsReady()
+                    ]);
+                    setIsPreloaded(true);
+                }
+                
+                await minTimePromise;
+
+                setIsUIWarmedUp(true);
+                setIsLeavingLoading(true);
+                setTimeout(() => {
+                    setCurrentPage('home');
+                }, 300);
+            };
+            ensureLoaded();
+        }
+    }, [currentPage, isPreloaded]);
+
+    const openPoem = (id) => {
+        if (unlockedPoems.includes(id)) {
+            setCurrentPoemId(id);
+            setCurrentPage('game');
+            const poemObj = POEMS.find(p => p.id === id);
+            if (poemObj) {
+                SM.enterGameMode(poemObj.ambienceAudio);
+                const ambienceName = poemObj.ambience || "意境音效";
+                setTimeout(() => triggerToast(`🎧 正在播放背景音效：${ambienceName}`), 1000);
+            }
+        } else {
+            triggerToast("此篇尚未解鎖，請先完成前置章節。");
+        }
+    };
+
+    const handlePoemComplete = (id) => {
+        const currentIndex = POEMS.findIndex(p => p.id === id);
+        if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
+            const nextId = POEMS[currentIndex + 1].id;
+            if (!unlockedPoems.includes(nextId)) {
+                setUnlockedPoems([...unlockedPoems, nextId]);
+                setTimeout(() => triggerToast(`✨ 恭喜解鎖新篇章：《${POEMS[currentIndex + 1].title}》！`), 800);
+            }
+        }
+        setCurrentPage('home');
+    };
+
+    const getCardFontClasses = () => {
+        if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
+        if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
+        return { title: 'text-sm', author: 'text-[10px]', info: 'text-[9px]' };
+    };
+
+    const getReadingFontClass = () => {
+        if (fontSize === 'sm') return 'text-sm leading-relaxed';
+        if (fontSize === 'lg') return 'text-lg md:text-xl leading-loose';
+        return 'text-base leading-relaxed'; 
+    };
+
+    const cardFonts = getCardFontClasses();
+
+    // --- 頁面路由控制 ---
+    
+    // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換 homeTab 時按鈕與印章變大/閃爍）
+    const renderPreloadContainer = () => (
+        <div className="invisible fixed -left-[9999px] -top-[9999px] w-[375px] h-[667px] pointer-events-none aria-hidden">
+            <div className="space-y-3.5">
+                {POEMS.map((poem) => (
+                    <div key={`preload-read-${poem.id}`} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90">
+                        <div>
+                            <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold`}>{poem.title}</h4>
+                        </div>
+                        <i className="fa-solid fa-book-open text-[#c9a76b]"></i>
+                    </div>
+                ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+                {POEMS.map((poem) => (
+                    <div key={`preload-seal-${poem.id}`} className="p-3 rounded-lg border bg-[#161310] border-[#3a3224] group hover:border-[#c9a76b]/50">
+                        <span className="text-[10px] text-[#e0d5ba]">{poem.title}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
-}
+
+            // --- 頁面路由控制 ---
+if (currentPage === 'start') {
+        return (
+            <>
+                {renderPreloadContainer()}
+                <div 
+                    className={`app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative select-none ${isLeavingStart ? 'animate-fade-out' : 'animate-fade-in'}`} 
+                    style={{ backgroundImage: "url('./start.webp')" }}
+                >
+                    <button 
+                        onClick={startGame} 
+                        className="absolute bottom-[50%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center hover:scale-105 active:scale-95 transition-transform z-20 clickable-hotspot animate-btn-fade-in" 
+                        style={{ backgroundImage: "url('./startbtn.webp')" }} 
+                    />
+                </div>
+            </>
+        );
+    }
 
             if (currentPage === 'loading') {
                 return (
-                    <div className="app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative animate-fade-in" style={{ backgroundImage: "url('./loading.webp')" }}>
+                    <div className={`app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative ${isLeavingLoading ? 'animate-fade-out' : 'animate-fade-in'}`} style={{ backgroundImage: "url('./loading.webp')" }}>
                         <div className="absolute top-1/4 flex flex-col items-center z-10">
                             <div className="relative w-20 h-20 flex items-center justify-center mt-20">
                                 <img src="./loading-icon.webp" alt="載入中" className="w-full h-full object-contain animate-spin-slow pointer-events-none opacity-85" style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} />
@@ -430,238 +542,365 @@ if (currentPage === 'start') {
                 );
             }
 
-if (currentPage === 'home') {
-    const cardFonts = getCardFontClasses();
-    return (
-        <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
-            
-            {/* 固定頂部 Header */}
-            <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-                <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
-                <div className="text-[10px] text-gray-500 tracking-widest uppercase">
-                    {/* 頂部文字同步改為你的排序邏輯 */}
-                    {!showMenu && !showSettings && homeTab === 'game' ? '探索篇章' : 
-                     !showMenu && !showSettings && homeTab === 'reading' ? '典藏閱讀' : 
-                     showMenu && !showSettings ? '雅士成就' : '系統設置'}
-                </div>
-            </header>
-
-            {/* 中間內容核心區：完全依照【篇章遊戲 → 閱讀頁 → 成就 → 設定】順序渲染 */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 relative z-10 scrollbar-hide">
-                
-                {/* ==================== 1. 篇章遊戲 (探索) ==================== */}
-                {!showMenu && !showSettings && homeTab === 'game' && (
-                    <div className="animate-fade-in">
-                        <div className="mb-4">
-                            <p className="text-[#c9a76b] text-base tracking-widest">探索詩境之美</p>
-                            <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
-                        </div>
-                        <h3 className="text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
-                        <div className="space-y-3.5 mb-10">
-                            {POEMS.map((poem, idx) => {
-                                const isUnlocked = unlockedPoems.includes(poem.id);
-                                const isCompleted = isUnlocked && poem.hotspots.length > 0;
-                                return (
-                                    <div key={poem.id} onClick={() => openPoem(poem.id)} className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
-                                        <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
-                                            {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
-                                                <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
-                                            </div>
-                                            {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
-                                        </div>
-                                        <div className="px-2">
-                                            {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
-                                             isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
-                                             <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-{/* ==================== 2. 閱讀頁 (典藏) ==================== */}
-{!showMenu && !showSettings && homeTab === 'reading' && (
-    <div className="animate-fade-in">
-        <div className="mb-4">
-            <p className="text-[#c9a76b] text-base tracking-widest">典藏卷軸</p>
-            <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">自由閱讀與溫習所有文學經典</p>
-        </div>
-        <div className="space-y-3.5 mb-10">
-            {POEMS.map((poem) => {
-                const isExplored = unlockedPoems.includes(poem.id);
+            if (currentPage === 'home') {
+                const cardFonts = getCardFontClasses();
                 return (
-                    <div key={poem.id} onClick={() => setReadingPoem(poem)} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
-                                {isExplored && (
-                                    <span className="text-[9px] text-[#c9a76b] border border-[#c9a76b]/40 bg-[#c9a76b]/10 px-1.5 py-0.2 rounded font-medium">已通關</span>
-                                )}
+                    <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in">
+                        <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+                        
+                        <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
+                            <h1 className="text-base text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
+                            <div className="text-[10px] text-gray-500 tracking-widest uppercase">
+                                {!showMenu && !showSettings && homeTab === 'game' ? '探索篇章' : 
+                                 !showMenu && !showSettings && homeTab === 'reading' ? '典藏閱讀' : 
+                                 showMenu && !showSettings ? '雅士成就' : '系統設置'}
                             </div>
-                            <p className={`${cardFonts.author} text-gray-500`}>{poem.author}</p>
-                        </div>
-                        <i className="fa-solid fa-book-open text-[#c9a76b] opacity-80"></i>
-                    </div>
-                );
-            })}
-        </div>
+                        </header>
+
+                        <div 
+                            ref={scrollContainerRef} 
+                            className="flex-1 overflow-y-auto px-6 py-4 relative z-10 scrollbar-hide"
+                        >
+                            {!showMenu && !showSettings && homeTab === 'game' && (
+                                <div className="animate-fade-in">
+                                    <div className="mb-4">
+                                        <p className="text-[#c9a76b] text-base tracking-widest">探索詩境之美</p>
+                                        <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
+                                    </div>
+                                    <h3 className="text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
+                                    <div className="space-y-3.5 mb-10">
+                                        {POEMS.map((poem, idx) => {
+                                            const isUnlocked = unlockedPoems.includes(poem.id);
+                                            const isCompleted = isUnlocked && poem.hotspots.length > 0;
+                                            return (
+                                                <div key={poem.id} onClick={() => openPoem(poem.id)} className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
+                                                    <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
+                                                        {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
+                                                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                                                        </div>
+                                                        {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
+                                                    </div>
+                                                    <div className="px-2">
+                                                        {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
+                                                         isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
+                                                         <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!showMenu && !showSettings && homeTab === 'reading' && (
+                                <div className="animate-fade-in">
+                                    <div className="mb-4">
+                                        <p className="text-[#c9a76b] text-base tracking-widest">典藏卷軸</p>
+                                        <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">自由閱讀與溫習所有文學經典</p>
+                                    </div>
+                                    <div className="space-y-3.5 mb-10">
+                                        {POEMS.map((poem) => {
+                                            const isExplored = unlockedPoems.includes(poem.id);
+                                            return (
+                                                <div key={poem.id} onClick={() => setReadingPoem(poem)} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
+                                                            {isExplored && (
+                                                                <span className="text-[9px] text-[#c9a76b] border border-[#c9a76b]/40 bg-[#c9a76b]/10 px-1.5 py-0.2 rounded font-medium">已通關</span>
+                                                            )}
+                                                        </div>
+                                                        <p className={`${cardFonts.author} text-gray-500`}>{poem.author}</p>
+                                                    </div>
+                                                    <i className="fa-solid fa-book-open text-[#c9a76b] opacity-80"></i>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {showMenu && !showSettings && (
+                                <div className="animate-fade-in pb-10">
+                                    <div className="flex flex-col items-center justify-center mt-4 mb-8">
+                                        <div className="w-16 h-16 rounded-full border border-[#c9a76b] flex items-center justify-center mb-3 bg-[#141210] shadow-[0_0_15px_rgba(201,167,107,0.15)]">
+                                            <i className="fa-solid fa-award text-[#c9a76b] text-3xl"></i>
+                                        </div>
+                                        <h3 className="text-sm text-[#e0d5ba] tracking-widest font-bold">雅士集章</h3>
+                                        <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{unlockedPoems.length * 10} 點</p>
+                                    </div>
+                                    
+                                    <div className="pt-4 border-t border-[#2d281f] mt-6">
+                                        <div className="flex justify-between items-end mb-3">
+                                            <h4 className="text-xs text-[#c9a76b] border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">文創集章冊</h4>
+                                            <span className="text-[10px] text-gray-500">已集得 {unlockedPoems.length} / {POEMS.length} 印</span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">
+                                            完成篇章探索挑戰，即可獲得該篇之專屬古典篆印。<br/>
+                                            <span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 聯動獎勵：</span>集滿全部印章可兌換實體拓印明信片！
+                                        </p>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            {POEMS.map((poem, idx) => {
+                                                const isUnlocked = unlockedPoems.includes(poem.id);
+                                                const stampChar = poem.stampChar || poem.title.charAt(0);
+                                                const stampName = poem.stampName || `${poem.title.slice(0, 2)}印`;
+                                                
+                                                let shapeType = "stone";
+                                                    if (idx <= 6) {
+                                                        // 0 ~ 6 篇（先秦篇章）：交替使用「屋形古璽」與「古方璽」
+                                                    shapeType = idx % 2 === 0 ? "house" : "stone";
+                                                } else if (idx >= 6 && idx <= 13) {
+                                                    shapeType = idx % 2 === 0 ? "circle" : "square";
+                                                } else if (idx >= 13 && idx <= 20) {
+                                                    shapeType = "gourd";
+                                                } else if (idx >= 21) {
+                                                    shapeType = "modern";
+                                                }
+
+                                                const isZhuWen = Math.floor(idx / 2) % 2 === 0;
+                                                const rotations = ['-rotate-2', 'rotate-2', '-rotate-1', 'rotate-3', '-rotate-3', 'rotate-1'];
+                                                const currentRotate = rotations[idx % rotations.length];
+                                                const filterId = `seal-spot-erosion-${idx}`;
+
+                                                return (
+                                                    <div 
+                                                        key={poem.id} 
+                                                        className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors duration-200 relative overflow-hidden ${
+                                                            isUnlocked 
+                                                                ? 'bg-[#161310] border-[#3a3224] shadow-md group hover:border-[#c9a76b]/50' 
+                                                                : 'bg-[#100f0d]/40 border-[#1a1714] opacity-35'
+                                                        }`}
+                                                    >
+                                                        <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} aria-hidden="true">
+                                                            <defs>
+                                                                <filter id={filterId} x="-10%" y="-10%" width="120%" height="120%">
+                                                                    <feTurbulence type="fractalNoise" baseFrequency="0.22" numOctaves="2" seed={idx * 19 + 7} result="noise" />
+                                                                    <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 16 -11" in="noise" result="spotMask" />
+                                                                    <feComposite operator="out" in="SourceGraphic" in2="spotMask" />
+                                                                </filter>
+                                                            </defs>
+                                                        </svg>
+
+                                                        <div className={`relative w-12 h-12 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isUnlocked ? 'scale-100 group-hover:scale-105' : 'scale-90'}`}>
+                                                            {isUnlocked ? (
+                                                                poem.sealImgUrl ? (
+                                                                    <img 
+                                                                        src={poem.sealImgUrl} 
+                                                                        alt={stampName} 
+                                                                        className="w-11 h-11 object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                                                                        style={{ filter: `url(#${filterId})` }}
+                                                                    />
+                                                                ) : (
+                                                                    <div 
+                                                                        className="w-full h-full flex items-center justify-center relative select-none"
+                                                                        style={{ 
+                                                                            filter: `url(#${filterId})`,
+                                                                            fontFamily: "'Noto Serif TC', serif"
+                                                                        }}
+                                                                    >
+                                                                        {shapeType === 'square' && (
+                                                                            <div className={`w-11 h-11 border-[3px] border-double border-red-700/90 rounded-sm flex items-center justify-center p-0.5 shadow-[0_0_8px_rgba(185,28,28,0.25)] ${isZhuWen ? 'border-red-700 bg-red-950/10' : 'bg-red-800 border-red-800'}`}>
+                                                                                <div className={`w-full h-full border ${isZhuWen ? 'border-red-700/50' : 'border-red-200/20'} flex items-center justify-center`}>
+                                                                                    <span className={`font-bold text-base leading-none tracking-tighter ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+                                                                                        {stampChar}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+{shapeType === 'house' && (
+    <div className="relative w-11 h-11 flex items-center justify-center">
+        <svg viewBox="0 0 100 110" className={`absolute inset-0 w-full h-full ${isZhuWen ? 'text-red-700' : 'text-red-800'}`}>
+            <path 
+                /* 圖一屋形（五邊尖頂古璽）：尖頂 (50,8) + 圓角下邊框 */
+                d="M 50,8 L 84,28 C 87,30 87,34 87,38 L 87,94 C 87,100 81,104 75,104 L 25,104 C 19,104 13,100 13,94 L 13,38 C 13,34 13,30 16,28 Z" 
+                fill={isZhuWen ? 'none' : 'currentColor'} 
+                stroke="currentColor" 
+                strokeWidth="6" 
+                strokeLinejoin="round"
+            />
+        </svg>
+        <span className={`z-10 font-bold text-base leading-none mt-2 ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+            {stampChar}
+        </span>
     </div>
 )}
 
-{/* ==================== 3. 成就頁面 (動態精緻集章冊) ==================== */}
-{showMenu && !showSettings && (
-    <div className="animate-fade-in pb-10">
-        <div className="flex flex-col items-center justify-center mt-4 mb-8">
-            <div className="w-16 h-16 rounded-full border border-[#c9a76b] flex items-center justify-center mb-3 bg-[#141210] shadow-[0_0_15px_rgba(201,167,107,0.15)]">
-                <i className="fa-solid fa-award text-[#c9a76b] text-3xl"></i>
+{shapeType === 'gourd' && (() => {
+    // 從已有變數 stampName 中去掉「印」字並取前兩個字 (例如 "南鄉印" -> "南鄉")
+    const gourdChars = stampName.replace('印', '').slice(0, 2);
+    const topChar = gourdChars[0] || stampChar;
+    const bottomChar = gourdChars[1] || '';
+
+    return (
+        <div className="relative w-10 h-[52px] flex items-center justify-center">
+            <svg viewBox="0 0 100 125" className={`absolute inset-0 w-full h-full ${isZhuWen ? 'text-red-700' : 'text-red-800'}`}>
+                <path 
+                    d="M 46,14 L 46,4 C 46,2 54,2 54,4 L 54,14 C 66,15 76,23 76,35 C 76,45 65,51 60,55 C 79,61 88,73 88,88 C 88,106 71,118 50,118 C 29,118 12,106 12,88 C 12,73 21,61 40,55 C 35,51 24,45 24,35 C 24,23 34,15 46,14 Z" 
+                    fill={isZhuWen ? 'none' : 'currentColor'} 
+                    stroke="currentColor" 
+                    strokeWidth="6" 
+                    strokeLinejoin="round"
+                />
+            </svg>
+            
+            {/* 上下雙字：第一個字入上肚、第二個字入下肚 */}
+            <div className={`z-10 flex flex-col items-center justify-between h-[30px] mb-1 leading-none font-bold text-[10px] ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+                <span>{topChar}</span>
+                {bottomChar && <span>{bottomChar}</span>}
             </div>
-            <h3 className="text-sm text-[#e0d5ba] tracking-widest font-bold">雅士集章</h3>
-            <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{unlockedPoems.length * 10} 點</p>
-        </div>
-        
-        <div className="pt-4 border-t border-[#2d281f] mt-6">
-            <div className="flex justify-between items-end mb-3">
-                <h4 className="text-xs text-[#c9a76b] border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">文創集章冊</h4>
-                <span className="text-[10px] text-gray-500">已集得 {unlockedPoems.length} / {POEMS.length} 印</span>
-            </div>
-            <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">
-                完成篇章探索挑戰，即可獲得該篇之專屬古典篆印。<br/>
-                <span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 聯動獎勵：</span>集滿全部印章可兌換實體拓印明信片！
-            </p>
-
-            {/* 動態渲染 POEMS 裡面所有篇章的專屬印章 */}
-            <div className="grid grid-cols-3 gap-3">
-                {POEMS.map((poem, idx) => {
-                    const isUnlocked = unlockedPoems.includes(poem.id);
-                    // 取得篇章第一個字作為印字
-                    const stampChar = poem.stampChar || poem.title.charAt(0);
-                    // 印章名字（例：白露印、楚辭印）
-                    const stampName = poem.stampName || `${poem.title.slice(0, 2)}印`;
-                    
-                    // 奇數為陽刻(朱文)，偶數為陰刻(白文)
-                    const isYangStyle = idx % 2 === 0; 
-                    // 微小的旋轉角度，模擬手蓋印章的質感
-                    const rotations = ['-rotate-3', 'rotate-2', '-rotate-1', 'rotate-3', '-rotate-2'];
-                    const currentRotate = rotations[idx % rotations.length];
-
-                    return (
-                        <div key={poem.id} className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-all duration-500 ${isUnlocked ? 'bg-[#161310] border-[#3a3224] shadow-md' : 'bg-[#100f0d]/40 border-[#1a1714] opacity-30'}`}>
-                            
-                            {/* 印章主體 */}
-                            <div className={`relative w-11 h-11 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isUnlocked ? 'scale-100' : 'scale-90'}`}>
-                                {isUnlocked ? (
-                                    isYangStyle ? (
-                                        // 陽刻（朱文：紅框紅字、細線內框）
-                                        <div className="w-full h-full border-[3px] border-double border-red-700/90 rounded-sm flex items-center justify-center bg-red-950/20 shadow-[0_0_10px_rgba(185,28,28,0.3)]">
-                                            <div className="w-[82%] h-[82%] border border-red-700/60 flex items-center justify-center">
-                                                <span className="text-red-600 font-bold text-base tracking-tighter drop-shadow-[0_0_2px_rgba(220,38,38,0.8)]">
-                                                    {stampChar}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        // 陰刻（白文：實心紅底、白字）
-                                        <div className="w-full h-full bg-red-800/85 rounded-sm flex items-center justify-center border border-red-600/50 shadow-[0_0_12px_rgba(153,27,27,0.4)]">
-                                            <div className="w-[85%] h-[85%] border border-red-200/30 flex items-center justify-center">
-                                                <span className="text-[#f5e6cf] font-extrabold text-base tracking-tighter">
-                                                    {stampChar}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )
-                                ) : (
-                                    // 未解鎖狀態（灰色虛線鎖定框）
-                                    <div className="w-full h-full border-2 border-dashed border-gray-700 rounded-sm flex items-center justify-center">
-                                        <i className="fa-solid fa-lock text-gray-700 text-xs"></i>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* 印章名稱 */}
-                            <span className={`text-[9px] mt-2 font-medium tracking-wider ${isUnlocked ? 'text-[#e0d5ba]' : 'text-gray-600'}`}>
-                                {stampName}
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    </div>
-)}
-
-                {/* ==================== 4. 設定頁面 ==================== */}
-                {showSettings && (
-                    <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
-                        <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
-                            <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
-                            <div className="space-y-4 mb-6 px-1">
-                                <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, bgm: !audioSettings.bgm})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-                                <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, sfx: !audioSettings.sfx})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-                            </div>
-                            <div className="pt-2">
-                                <div className="flex justify-between items-center mb-1.5"><span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span><span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span></div>
-                                <div className="flex gap-2.5">{['sm', 'md', 'lg'].map(sz => <button key={sz} onClick={() => setFontSize(sz)} className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}>{sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}</button>)}</div>
-                            </div>
-
-                            <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
-                                {!confirmReset ? (
-                                    <button className="w-full py-1.5 rounded text-xs text-red-400 border border-red-900/50 hover:bg-red-950/30 tracking-widest" onClick={() => setConfirmReset(true)}>重置遊戲進度</button>
-                                ) : (
-                                    <div className="flex gap-2">
-                                        <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold" onClick={() => { setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
-                                        <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300" onClick={() => setConfirmReset(false)}>取消</button>
-                                    </div>
-                                )}
-                                <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* 點擊詩詞後的「全螢幕詳細閱讀彈窗」保持原樣 */}
-            {readingPoem && (
-                <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
-                    <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
-                        <button onClick={() => setReadingPoem(null)} className="p-2 clickable-hotspot"><i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i></button>
-                        <div className="text-center"><h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2><p className="text-[10px] text-gray-500">{readingPoem.author}</p></div>
-                        <div className="w-8"></div> 
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
-                        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
-                        <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6">
-                            {readingPoem.fullText && readingPoem.fullText.length > 0 ? readingPoem.fullText.map((line, idx) => <p key={idx} className={`whitespace-pre-line ${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>{line}</p>) : <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* 固定底部 Toolbar */}
-            <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col py-0.5 pb-1.5 border-t border-[#2d281f]/40">
-                <div className="flex justify-around items-center px-4 w-full h-12">
-                    <InkRingButton iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
-                    <InkRingButton iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
-                    <InkRingButton iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
-                    <InkRingButton iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
-                </div>
-            </div>
-
-            {toastMessage && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-[#161411]/95 border border-[#c9a76b]/40 py-2 px-4 rounded-md text-[11px] text-[#e0d5ba] tracking-wider shadow-xl animate-fade-in text-center max-w-[80dvw]">{toastMessage}</div>}
         </div>
     );
-}
+})()}
+
+
+                                                                        {shapeType === 'circle' && (
+                                                                            <div className={`w-11 h-11 rounded-full border-[3px] flex items-center justify-center p-1 relative ${isZhuWen ? 'border-red-700 bg-red-950/10' : 'bg-red-800 border-red-800'}`}>
+                                                                                <div className="absolute inset-1 rounded-full border border-current opacity-40 pointer-events-none"></div>
+                                                                                <span className={`font-bold text-sm leading-none z-10 ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+                                                                                    {stampChar}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {shapeType === 'stone' && (
+                                                                            <div className="relative w-11 h-11 flex items-center justify-center">
+                                                                                <svg viewBox="0 0 100 100" className={`absolute inset-0 w-full h-full ${isZhuWen ? 'text-red-700' : 'text-red-800'}`}>
+                                                                                    <path 
+                                                                                        d="M 16,18 Q 48,8 82,20 Q 94,52 84,84 Q 52,94 18,82 Q 8,50 16,18 Z" 
+                                                                                        fill={isZhuWen ? 'none' : 'currentColor'} 
+                                                                                        stroke="currentColor" 
+                                                                                        strokeWidth="6" 
+                                                                                        strokeLinejoin="round"
+                                                                                    />
+                                                                                </svg>
+                                                                                <span className={`z-10 font-bold text-base leading-none ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+                                                                                    {stampChar}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {shapeType === 'modern' && (
+                                                                            <div className={`w-10 h-10 rotate-45 border-2 rounded-[4px] flex items-center justify-center shadow-sm ${isZhuWen ? 'border-red-700 bg-red-950/20' : 'bg-red-800 border-red-800'}`}>
+                                                                                <span className={`-rotate-45 font-extrabold text-sm leading-none ${isZhuWen ? 'text-red-700' : 'text-[#f5e6cf]'}`}>
+                                                                                    {stampChar}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )
+                                                            ) : (
+                                                                <div className="w-10 h-10 border border-dashed border-gray-700 rounded flex items-center justify-center bg-black/20">
+                                                                    <i className="fa-solid fa-lock text-gray-700 text-xs"></i>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="text-center mt-2 w-full">
+                                                            <span className={`block text-[10px] font-medium tracking-wider truncate ${isUnlocked ? 'text-[#e0d5ba]' : 'text-gray-600'}`}>
+                                                                {stampName}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {showSettings && (
+                                <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
+                                    <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+                                        <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
+                                        <div className="space-y-4 mb-6 px-1">
+                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, bgm: !audioSettings.bgm})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, sfx: !audioSettings.sfx})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+                                        </div>
+                                        <div className="pt-2">
+                                            <div className="flex justify-between items-center mb-1.5"><span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span><span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span></div>
+                                            <div className="flex gap-2.5">{['sm', 'md', 'lg'].map(sz => <button key={sz} onClick={() => setFontSize(sz)} className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}>{sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}</button>)}</div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
+                                            {!confirmReset ? (
+                                                <button className="w-full py-1.5 rounded text-xs text-red-400 border border-red-900/50 hover:bg-red-950/30 tracking-widest" onClick={() => setConfirmReset(true)}>重置遊戲進度</button>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold" onClick={() => { setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
+                                                    <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300" onClick={() => setConfirmReset(false)}>取消</button>
+                                                </div>
+                                            )}
+                                            <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+{readingPoem && (
+                            <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
+                                <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
+                                    <button onClick={() => setReadingPoem(null)} className="p-2 clickable-hotspot">
+                                        <i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i>
+                                    </button>
+                                    
+                                    <div className="text-center">
+                                        <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2>
+                                        <p className="text-[10px] text-gray-500">{readingPoem.author}</p>
+                                    </div>
+
+                                    {/* 【修改】右上角新增複製按鈕 */}
+                                    <button 
+                                        onClick={() => handleCopyPoem(readingPoem)} 
+                                        className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center"
+                                        title="複製全文"
+                                    >
+                                        <i className="fa-regular fa-copy text-base"></i>
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
+                                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
+                                    
+                                    {/* 【修改】加上 fullText select-text 允許手動劃選文字 */}
+                                    <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6 fullText select-text">
+                                        {readingPoem.fullText && readingPoem.fullText.length > 0 ? (
+                                            readingPoem.fullText.map((line, idx) => (
+                                                <p key={idx} className={`whitespace-pre-line ${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>
+                                                    {line}
+                                                </p>
+                                            ))
+                                        ) : (
+                                            <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col py-0.5 pb-1.5 border-t border-[#2d281f]/40">
+                            <div className="flex justify-around items-center px-4 w-full h-12">
+                                <InkRingButton iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
+                                <InkRingButton iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
+                                <InkRingButton iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
+                                <InkRingButton iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
+                            </div>
+                        </div>
+
+                        {toastMessage && <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-[#161411]/95 border border-[#c9a76b]/40 py-2 px-4 rounded-md text-[11px] text-[#e0d5ba] tracking-wider shadow-xl animate-fade-in text-center max-w-[80dvw]">{toastMessage}</div>}
+                    </div>
+                );
+            }
 
             if (currentPage === 'game') {
                 const poem = POEMS.find(p => p.id === currentPoemId);
-                return <GamePlayArea poem={poem} onBack={() =>{ 
-                  // 在這裡呼叫！會自動把 YouTube 恢復為 100 音量，並關閉篇章音效
+                return <GamePlayArea poem={poem} onBack={() => { 
                   SM.exitGameMode(); 
                   setCurrentPage('home'); 
               }} onComplete={() => handlePoemComplete(poem.id)} triggerToast={triggerToast} />;
@@ -669,360 +908,346 @@ if (currentPage === 'home') {
             return null;
         }
 
-
-function GamePlayArea({ poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound }) {
-    const [currentStep, setCurrentStep] = useState(0);
-    const [mistakes, setMistakes] = useState({}); 
-    const [isShaking, setIsShaking] = useState(false);
-    const [showCompletion, setShowCompletion] = useState(false);
-    const [clickedPos, setClickedPos] = useState(null); 
-    
-    // 預設開啟文字提示與字幕
-    const [showSubtitle, setShowSubtitle] = useState(true); 
-    const [showHotspotHints, setShowHotspotHints] = useState(false); 
-    const [soundEnabled, setSoundEnabled] = useState(!isMuted);
-
-    // 💡 1. 新增：控制「廣東話詩境語譯」彈窗狀態
-    const [showInterpretation, setShowInterpretation] = useState(false);
-
-    // 進入遊戲時的 2 秒文字發光引導效果
-    const [isEntryGlowing, setIsEntryGlowing] = useState(true);
-
-    useEffect(() => {
-        const timer = setTimeout(() => setIsEntryGlowing(false), 2000);
-
-        return () => clearTimeout(timer);
-    }, []);
-
-    const handleGlobalClick = () => {
-        if (isEntryGlowing) setIsEntryGlowing(false);
-    };
-
-    const handleHotspotClick = (index, e) => {
-        e.stopPropagation();
-        handleGlobalClick();
-
-        if (index === currentStep) {
-            const rect = e.currentTarget.getBoundingClientRect(); 
-            const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-            setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: true });
-            setTimeout(() => { 
-                if (currentStep + 1 >= poem.hotspots.length) setShowCompletion(true); 
-                else setCurrentStep(currentStep + 1); 
-                setClickedPos(null); 
-            }, 700);
-        } else if (index > currentStep) {
-            setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
-            setIsShaking(true); 
-            setTimeout(() => setIsShaking(false), 400);
-            const rect = e.currentTarget.getBoundingClientRect(); 
-            const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-            setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: false });
-            setTimeout(() => setClickedPos(null), 400);
-        }
-    };
-
-    const handleBackgroundClick = (e) => {
-        handleGlobalClick();
-        setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
-        setIsShaking(true); 
-        setTimeout(() => setIsShaking(false), 400);
-        const parentRect = e.currentTarget.getBoundingClientRect();
-        setClickedPos({ x: e.clientX - parentRect.left, y: e.clientY - parentRect.top, success: false });
-        setTimeout(() => setClickedPos(null), 400);
-    };
-
-    const toggleSound = () => {
-        if (onToggleSound) onToggleSound();
-        else setSoundEnabled(!soundEnabled);
-        triggerToast(!soundEnabled ? "音效已開啟" : "靜音模式");
-    };
-
-    // 當前步驟的 hotspots 資料
-    const currentSpot = poem.hotspots[currentStep] || {};
-
-    return (
-        <div 
-            className={`app-container bg-black overflow-hidden animate-fade-in relative select-none ${isShaking ? 'animate-shake' : ''}`}
-            onClick={handleGlobalClick}
-        >
-            {/* 背景圖 */}
-            <div className="absolute inset-0 w-full h-full cursor-pointer animate-fade-in pointer-events-auto" onClick={handleBackgroundClick}>
-                <img src={poem.bgImage} alt="Backdrop" className="w-full h-full object-cover opacity-100" />
-            </div>
+        function GamePlayArea({ poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound }) {
+            const [currentStep, setCurrentStep] = useState(0);
+            const [mistakes, setMistakes] = useState({}); 
+            const [isShaking, setIsShaking] = useState(false);
+            const [showCompletion, setShowCompletion] = useState(false);
+            const [clickedPos, setClickedPos] = useState(null); 
             
-            {/* 📍 頂部導覽列：題目完美絕對置中 */}
-            <div className="absolute top-0 left-0 w-full py-2 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/55 backdrop-blur-[1px]">
-                <button onClick={onBack} className="pointer-events-auto p-1.5 clickable-hotspot">
-                    <i className="fa-solid fa-chevron-left text-[#c9a76b] text-base"></i>
-                </button>
+            const [showSubtitle, setShowSubtitle] = useState(true); 
+            const [showHotspotHints, setShowHotspotHints] = useState(false); 
+            const [soundEnabled, setSoundEnabled] = useState(!isMuted);
+            const [showInterpretation, setShowInterpretation] = useState(false);
+            const [isEntryGlowing, setIsEntryGlowing] = useState(true);
 
-                <div className="absolute left-1/2 -translate-x-1/2 text-center drop-shadow-md pointer-events-none">
-                    <h2 className="text-sm text-[#e0d5ba] tracking-[0.25em] font-bold">{poem.title}</h2>
-                    <p className="text-[9px] text-gray-300/80 font-light tracking-wider">— {poem.author} —</p>
-                </div>
+            useEffect(() => {
+                const timer = setTimeout(() => setIsEntryGlowing(false), 2000);
+                return () => clearTimeout(timer);
+            }, []);
 
-                <div className="w-6 h-6"></div>
-            </div>
+            const handleGlobalClick = () => {
+                if (isEntryGlowing) setIsEntryGlowing(false);
+            };
 
-            {/* 📍 光點渲染邏輯 */}
-            {poem.hotspots.map((spot, index) => {
-                const isCurrentTarget = index === currentStep; 
-                const isCompleted = index < currentStep; 
-                const mistakeCount = mistakes[index] || 0;
-                const needsHint = isCurrentTarget && mistakeCount >= 2;
-                
-                const isHighlightGold = (showHotspotHints && isCurrentTarget) || needsHint;
+            const handleHotspotClick = (index, e) => {
+                e.stopPropagation();
+                handleGlobalClick();
 
-                return (
-                    <div 
-                        key={spot.id} 
-                        className={`absolute w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center clickable-hotspot transition-all duration-300 ${isCompleted ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
-                        style={{ left: `${spot.x}%`, top: `${spot.y}%`, zIndex: 10 }} 
-                        onClick={(e) => handleHotspotClick(index, e)}
-                    >
-                        {isHighlightGold ? (
-                            /* 開啟時：當前答案光點亮起成金色並放大 */
-                            <div className="w-5 h-5 rounded-full bg-[#c9a76b] border-2 border-white/90 shadow-[0_0_15px_#c9a76b,0_0_25px_#ffffff] flex items-center justify-center animate-pulse scale-110 transition-transform">
-                                <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
-                            </div>
-                        ) : (
-                            /* 關閉時：顯示一式一樣的小白色光點 */
-                            <div className="w-2.5 h-2.5 rounded-full bg-white/70 border border-white/90 shadow-[0_0_6px_rgba(255,255,255,0.9)] transition-all"></div>
-                        )}
-                    </div>
-                );
-            })}
+                if (index === currentStep) {
+                    const rect = e.currentTarget.getBoundingClientRect(); 
+                    const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: true });
+                    setTimeout(() => { 
+                        if (currentStep + 1 >= poem.hotspots.length) setShowCompletion(true); 
+                        else setCurrentStep(currentStep + 1); 
+                        setClickedPos(null); 
+                    }, 700);
+                } else if (index > currentStep) {
+                    setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                    setIsShaking(true); 
+                    setTimeout(() => setIsShaking(false), 400);
+                    const rect = e.currentTarget.getBoundingClientRect(); 
+                    const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: false });
+                    setTimeout(() => setClickedPos(null), 400);
+                }
+            };
 
-            {/* 點擊水波紋 */}
-            {clickedPos && (
-                <div className={`absolute rounded-full pointer-events-none z-30 ripple-effect ${clickedPos.success ? 'border-2 border-[#c9a76b] bg-[#c9a76b]/25 shadow-[0_0_12px_#c9a76b]' : 'border-2 border-red-500/40 bg-red-500/15'}`} style={{ left: clickedPos.x, top: clickedPos.y, width: '24px', height: '24px', marginLeft: '-12px', marginTop: '-12px' }} />
-            )}
+            const handleBackgroundClick = (e) => {
+                handleGlobalClick();
+                setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+                setIsShaking(true); 
+                setTimeout(() => setIsShaking(false), 400);
+                const parentRect = e.currentTarget.getBoundingClientRect();
+                setClickedPos({ x: e.clientX - parentRect.left, y: e.clientY - parentRect.top, success: false });
+                setTimeout(() => setClickedPos(null), 400);
+            };
 
-            {/* 📍 題目字幕提示：開場 2 秒文字發光效果 */}
-            <div className="absolute bottom-16 left-0 w-full px-4 text-center pointer-events-none z-30">
-                {currentStep < poem.hotspots.length && (
-                    <div className="h-9 flex items-center justify-center pointer-events-none">
-                        {showSubtitle ? (
-                            <p className={`text-sm text-[#e0d5ba] tracking-widest font-bold bg-black/50 backdrop-blur-[2px] py-1.5 px-5 rounded-full inline-block border transition-all duration-500 ${
-                                isEntryGlowing 
-                                    ? 'border-[#c9a76b] text-[#fff6d6] shadow-[0_0_15px_rgba(201,167,107,0.8)] scale-105' 
-                                    : 'border-[#c9a76b]/30 drop-shadow-md'
-                            }`}>
-                                {currentSpot.label}
-                            </p>
-                        ) : (
-                            <p className="text-[10px] text-gray-300/80 tracking-widest italic bg-black/50 backdrop-blur-[2px] py-1 px-4 rounded-full inline-block border border-white/10">
-                                〔 請於畫面中點選對應意象 〕
-                            </p>
-                        )}
-                    </div>
-                )}
-            </div>
+            const toggleSound = () => {
+                if (onToggleSound) onToggleSound();
+                else setSoundEnabled(!soundEnabled);
+                triggerToast(!soundEnabled ? "音效已開啟" : "靜音模式");
+            };
 
-            {/* 📍 下方工具欄：2按鈕 : 進度 : 2按鈕 平均分佈 */}
-            <div className="absolute bottom-0 left-0 w-full bg-[#0a0a09]/75 flex flex-col py-1 pb-1.5 border-t border-[#2d281f]/40 z-20">
-                <div className="flex justify-around items-center px-2 w-full h-11">
-                    
-                    {/* 1. 光點按鈕 */}
-                    <InkRingButton 
-                        iconClass={showHotspotHints ? "fa-solid fa-lightbulb text-[#c9a76b]" : "fa-regular fa-lightbulb"} 
-                        active={showHotspotHints} 
-                        onClick={() => {
-                            const nextState = !showHotspotHints;
-                            setShowHotspotHints(nextState);
-                            triggerToast(nextState ? "已顯示答案光點" : "已隱藏光點");
-                        }} 
-                        label={showHotspotHints ? "隱藏光點" : "答案光點"} 
-                    />
+            const currentSpot = poem.hotspots[currentStep] || {};
 
-                    {/* 2. 詩句字幕按鈕 */}
-                    <InkRingButton 
-                        iconClass={`fa-solid ${showSubtitle ? 'fa-eye text-[#c9a76b]' : 'fa-eye-slash text-gray-400'}`}
-                        active={showSubtitle} 
-                        isGlowing={isEntryGlowing}
-                        onClick={() => {
-                            const nextState = !showSubtitle;
-                            setShowSubtitle(nextState);
-                            triggerToast(nextState ? "提示字幕已開啟" : "提示字幕已隱藏");
-                        }} 
-                        label="詩句字幕" 
-                    />
-
-                    {/* 中間：進度顯示 */}
-                    <div className="flex flex-col items-center justify-center">
-                        <div className="w-12 h-7 flex items-center justify-center rounded-full border border-[#c9a76b]/40 relative bg-[#1c1914] shadow-inner">
-                            <span className="text-[#c9a76b] font-bold text-[10px] tracking-widest">{currentStep} / {poem.hotspots.length}</span>
-                        </div>
-                        <span className="text-[9px] mt-0.5 tracking-wider text-gray-400 font-medium">進度</span>
-                    </div>
-
-                    {/* 3. 背景音效按鈕 */}
-                    <InkRingButton 
-                        iconClass={soundEnabled ? "fa-solid fa-volume-high text-[#c9a76b]" : "fa-solid fa-volume-xmark text-gray-500"} 
-                        active={soundEnabled} 
-                        onClick={toggleSound} 
-                        label={soundEnabled ? "背景音效" : "靜音模式"} 
-                    />
-
-                    {/* 💡 4. 替代方案 A：詩境語譯 (廣東話口語解讀) */}
-                    <InkRingButton 
-                        iconClass="fa-solid fa-scroll text-[#c9a76b]" 
-                        active={showInterpretation} 
-                        onClick={() => {
-                            setShowInterpretation(true);
-                            triggerToast("打開廣東話詩意解讀");
-                        }} 
-                        label="詩境語譯" 
-                    />
-                </div>
-            </div>
-
-            {/* 💡 📍 廣東話口語詩境語譯彈窗 (國風雙線金邊設計) */}
-            {showInterpretation && (
+            return (
                 <div 
-                    className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-fade-in pointer-events-auto"
-                    onClick={() => setShowInterpretation(false)}
+                    className={`app-container bg-black overflow-hidden animate-fade-in relative select-none ${isShaking ? 'animate-shake' : ''}`}
+                    onClick={handleGlobalClick}
                 >
-                    <div 
-                        className="relative w-full max-w-[290px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-5 text-[#e0d5ba] shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.15)]"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* 古典細邊框與四角角花 */}
-                        <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
-                        <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
-                        <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
-                        <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
-                        <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
+                    <div className="absolute inset-0 w-full h-full cursor-pointer animate-fade-in pointer-events-auto" onClick={handleBackgroundClick}>
+                        <img src={poem.bgImage} alt="Backdrop" className="w-full h-full object-cover opacity-100" />
+                    </div>
+                    
+                    <div className="absolute top-0 left-0 w-full py-2 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/55 backdrop-blur-[1px]">
+                        <button onClick={onBack} className="pointer-events-auto p-1.5 clickable-hotspot">
+                            <i className="fa-solid fa-chevron-left text-[#c9a76b] text-base"></i>
+                        </button>
 
-                        {/* 標頭 */}
-                        <div className="flex justify-between items-center mb-3 pb-2 border-b border-[#c9a76b]/30">
-                            <div className="flex items-center gap-2">
-                                <i className="fa-solid fa-book-open text-[#c9a76b] text-xs"></i>
-                                <h3 className="text-xs font-bold tracking-[0.2em] text-[#e0d5ba]">詩境廣東話解讀</h3>
-                            </div>
-                            <button onClick={() => setShowInterpretation(false)} className="text-gray-400 hover:text-white p-1">
-                                <i className="fa-solid fa-xmark text-sm"></i>
-                            </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 text-center drop-shadow-md pointer-events-none">
+                            <h2 className="text-sm text-[#e0d5ba] tracking-[0.25em] font-bold">{poem.title}</h2>
+                            <p className="text-[9px] text-gray-300/80 font-light tracking-wider">— {poem.author} —</p>
                         </div>
 
-                        {/* 廣東話口語內容區 */}
-                        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-                            {/* 當前原詩句 */}
-                            <div className="text-center bg-[#1c1914] py-1.5 px-3 rounded border border-[#c9a76b]/20">
-                                <span className="text-xs text-[#c9a76b] font-bold tracking-widest">
-                                    「 {currentSpot.label || poem.title} 」
-                                </span>
-                            </div>
+                        <div className="w-6 h-6"></div>
+                    </div>
 
-                            {/* 廣東話口語白話譯 */}
-                            <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
-                                <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                    <i className="fa-solid fa-comment-dots"></i> 廣東話講緊乜：
-                                </p>
-                                <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
-                                    {currentSpot.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。"}
-                                </p>
-                            </div>
+                    {poem.hotspots.map((spot, index) => {
+                        const isCurrentTarget = index === currentStep; 
+                        const isCompleted = index < currentStep; 
+                        const mistakeCount = mistakes[index] || 0;
+                        const needsHint = isCurrentTarget && mistakeCount >= 2;
+                        const isHighlightGold = (showHotspotHints && isCurrentTarget) || needsHint;
 
-                            {/* 國風意象點評 */}
-                            {(currentSpot.cantoneseDesc || poem.cantoneseDesc) && (
-                                <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
-                                    <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                        <i className="fa-solid fa-feather-pointed"></i> 意象睇頭：
+                        return (
+                            <div 
+                                key={spot.id} 
+                                className={`absolute w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center clickable-hotspot transition-all duration-300 ${isCompleted ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
+                                style={{ left: `${spot.x}%`, top: `${spot.y}%`, zIndex: 10 }} 
+                                onClick={(e) => handleHotspotClick(index, e)}
+                            >
+                                {isHighlightGold ? (
+                                    <div className="w-5 h-5 rounded-full bg-[#c9a76b] border-2 border-white/90 shadow-[0_0_15px_#c9a76b,0_0_25px_#ffffff] flex items-center justify-center animate-pulse scale-110 transition-transform">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+                                    </div>
+                                ) : (
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white/70 border border-white/90 shadow-[0_0_6px_rgba(255,255,255,0.9)] transition-all"></div>
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* 點擊反饋動畫：金圈漣漪 + 金色微粒爆發 */}
+                    {clickedPos && (
+                        <>
+                            <div className={`absolute rounded-full pointer-events-none z-30 ripple-effect ${clickedPos.success ? 'border-2 border-[#c9a76b] bg-[#c9a76b]/25 shadow-[0_0_12px_#c9a76b]' : 'border-2 border-red-500/40 bg-red-500/15'}`} style={{ left: clickedPos.x, top: clickedPos.y, width: '24px', height: '24px', marginLeft: '-12px', marginTop: '-12px' }} />
+                            
+                            {clickedPos.success && Array.from({ length: 8 }).map((_, i) => {
+                                const angle = (i * (360 / 8)) * (Math.PI / 180);
+                                const distance = 26 + (i % 2) * 12;
+                                const dx = `${Math.cos(angle) * distance}px`;
+                                const dy = `${Math.sin(angle) * distance}px`;
+                                return (
+                                    <div
+                                        key={i}
+                                        className="golden-particle"
+                                        style={{
+                                            left: `${clickedPos.x}px`,
+                                            top: `${clickedPos.y}px`,
+                                            '--dx': dx,
+                                            '--dy': dy,
+                                            animationDelay: `${(i % 3) * 0.03}s`
+                                        }}
+                                    />
+                                );
+                            })}
+                        </>
+                    )}
+
+                    <div className="absolute bottom-16 left-0 w-full px-4 text-center pointer-events-none z-30">
+                        {currentStep < poem.hotspots.length && (
+                            <div className="h-9 flex items-center justify-center pointer-events-none">
+                                {showSubtitle ? (
+                                    <p className={`text-sm text-[#e0d5ba] tracking-widest font-bold bg-black/50 backdrop-blur-[2px] py-1.5 px-5 rounded-full inline-block border transition-all duration-500 ${
+                                        isEntryGlowing 
+                                            ? 'border-[#c9a76b] text-[#fff6d6] shadow-[0_0_15px_rgba(201,167,107,0.8)] scale-105' 
+                                            : 'border-[#c9a76b]/30 drop-shadow-md'
+                                    }`}>
+                                        {currentSpot.label}
                                     </p>
-                                    <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
-                                        {currentSpot.cantoneseDesc || poem.cantoneseDesc}
+                                ) : (
+                                    <p className="text-[10px] text-gray-300/80 tracking-widest italic bg-black/50 backdrop-blur-[2px] py-1 px-4 rounded-full inline-block border border-white/10">
+                                        〔 請於畫面中點選對應意象 〕
                                     </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="absolute bottom-0 left-0 w-full bg-[#0a0a09]/75 flex flex-col py-1 pb-1.5 border-t border-[#2d281f]/40 z-20">
+                        <div className="flex justify-around items-center px-2 w-full h-11">
+                            <InkRingButton 
+                                iconClass={showHotspotHints ? "fa-solid fa-lightbulb text-[#c9a76b]" : "fa-regular fa-lightbulb"} 
+                                active={showHotspotHints} 
+                                onClick={() => {
+                                    const nextState = !showHotspotHints;
+                                    setShowHotspotHints(nextState);
+                                    triggerToast(nextState ? "已顯示答案光點" : "已隱藏光點");
+                                }} 
+                                label={showHotspotHints ? "隱藏光點" : "答案光點"} 
+                            />
+
+                            <InkRingButton 
+                                iconClass={`fa-solid ${showSubtitle ? 'fa-eye text-[#c9a76b]' : 'fa-eye-slash text-gray-400'}`}
+                                active={showSubtitle} 
+                                isGlowing={isEntryGlowing}
+                                onClick={() => {
+                                    const nextState = !showSubtitle;
+                                    setShowSubtitle(nextState);
+                                    triggerToast(nextState ? "提示字幕已開啟" : "提示字幕已隱藏");
+                                }} 
+                                label="詩句字幕" 
+                            />
+
+                            <div className="flex flex-col items-center justify-center">
+                                <div className="w-12 h-7 flex items-center justify-center rounded-full border border-[#c9a76b]/40 relative bg-[#1c1914] shadow-inner">
+                                    <span className="text-[#c9a76b] font-bold text-[10px] tracking-widest">{currentStep} / {poem.hotspots.length}</span>
                                 </div>
-                            )}
+                                <span className="text-[9px] mt-0.5 tracking-wider text-gray-400 font-medium">進度</span>
+                            </div>
+
+                            <InkRingButton 
+                                iconClass={soundEnabled ? "fa-solid fa-volume-high text-[#c9a76b]" : "fa-solid fa-volume-xmark text-gray-500"} 
+                                active={soundEnabled} 
+                                onClick={toggleSound} 
+                                label={soundEnabled ? "背景音效" : "靜音模式"} 
+                            />
+
+                            <InkRingButton 
+                                iconClass="fa-solid fa-scroll text-[#c9a76b]" 
+                                active={showInterpretation} 
+                                onClick={() => {
+                                    setShowInterpretation(true);
+                                    triggerToast("打開廣東話詩意解讀");
+                                }} 
+                                label="詩境語譯" 
+                            />
                         </div>
-
-                        {/* 底部按鈕 */}
-                        <button 
-                            onClick={() => setShowInterpretation(false)} 
-                            className="mt-4 w-full py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all clickable-hotspot"
-                        >
-                            我知道啦
-                        </button>
                     </div>
-                </div>
-            )}
 
-            {/* 📍 精緻典雅國風通關彈窗 */}
-            {showCompletion && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
-                    <div className="relative w-full max-w-[280px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-6 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.2)]">
-                        <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
-                        <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
-                        <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
-                        <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
-                        <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
+                    {showInterpretation && (
+                        <div 
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-fade-in pointer-events-auto"
+                            onClick={() => setShowInterpretation(false)}
+                        >
+                            <div 
+                                className="relative w-full max-w-[290px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-5 text-[#e0d5ba] shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.15)]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
+                                <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
+                                <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
+                                <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
+                                <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
 
-                        <div className="w-14 h-14 rounded-full border-2 border-[#c9a76b] flex items-center justify-center mb-4 bg-red-950/30 shadow-[0_0_15px_rgba(185,28,28,0.3)]">
-                            <i className="fa-solid fa-award text-[#c9a76b] text-2xl"></i>
+                                <div className="flex justify-between items-center mb-3 pb-2 border-b border-[#c9a76b]/30">
+                                    <div className="flex items-center gap-2">
+                                        <i className="fa-solid fa-book-open text-[#c9a76b] text-xs"></i>
+                                        <h3 className="text-xs font-bold tracking-[0.2em] text-[#e0d5ba]">詩境廣東話解讀</h3>
+                                    </div>
+                                    <button onClick={() => setShowInterpretation(false)} className="text-gray-400 hover:text-white p-1">
+                                        <i className="fa-solid fa-xmark text-sm"></i>
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+                                    <div className="text-center bg-[#1c1914] py-1.5 px-3 rounded border border-[#c9a76b]/20">
+                                        <span className="text-xs text-[#c9a76b] font-bold tracking-widest">
+                                            「 {currentSpot.label || poem.title} 」
+                                        </span>
+                                    </div>
+
+                                    <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
+                                        <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                            <i className="fa-solid fa-comment-dots"></i> 廣東話講緊乜：
+                                        </p>
+                                        <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
+                                            {currentSpot.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。"}
+                                        </p>
+                                    </div>
+
+                                    {(currentSpot.cantoneseDesc || poem.cantoneseDesc) && (
+                                        <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
+                                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                                <i className="fa-solid fa-feather-pointed"></i> 意象睇頭：
+                                            </p>
+                                            <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
+                                                {currentSpot.cantoneseDesc || poem.cantoneseDesc}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <button 
+                                    onClick={() => setShowInterpretation(false)} 
+                                    className="mt-4 w-full py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all clickable-hotspot"
+                                >
+                                    我知道啦
+                                </button>
+                            </div>
                         </div>
+                    )}
 
-                        <h2 className="text-lg text-[#e0d5ba] tracking-[0.3em] font-bold mb-1">典藏入卷</h2>
-                        <div className="w-12 h-[1px] bg-[#c9a76b]/40 my-2"></div>
-                        
-                        <p className="text-gray-300 text-xs mb-6 tracking-wider leading-relaxed">
-                            恭喜完成《<span className="text-[#c9a76b]">{poem.title}</span>》<br/>意象探索與詩境解鎖
-                        </p>
+                    {showCompletion && (
+                        <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
+                            <div className="relative w-full max-w-[280px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-6 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.2)]">
+                                <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
+                                <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
+                                <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
+                                <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
+                                <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
 
-                        <button 
-                            onClick={onComplete} 
-                            className="w-full py-2.5 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] hover:bg-[#c9a76b]/30 active:scale-95 transition-all text-xs tracking-[0.2em] font-bold shadow-md clickable-hotspot"
-                        >
-                            返回卷軸
-                        </button>
+                                <div className="w-14 h-14 rounded-full border-2 border-[#c9a76b] flex items-center justify-center mb-4 bg-red-950/30 shadow-[0_0_15px_rgba(185,28,28,0.3)]">
+                                    <i className="fa-solid fa-award text-[#c9a76b] text-2xl"></i>
+                                </div>
+
+                                <h2 className="text-lg text-[#e0d5ba] tracking-[0.3em] font-bold mb-1">典藏入卷</h2>
+                                <div className="w-12 h-[1px] bg-[#c9a76b]/40 my-2"></div>
+                                
+                                <p className="text-gray-300 text-xs mb-6 tracking-wider leading-relaxed">
+                                    恭喜完成《<span className="text-[#c9a76b]">{poem.title}</span>》<br/>意象探索與詩境解鎖
+                                </p>
+
+                                <button 
+                                    onClick={onComplete} 
+                                    className="w-full py-2.5 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] hover:bg-[#c9a76b]/30 active:scale-95 transition-all text-xs tracking-[0.2em] font-bold shadow-md clickable-hotspot"
+                                >
+                                    返回卷軸
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function InkRingButton({ iconClass, onClick, active, label, isGlowing = false }) {
+            return (
+                <button 
+                    onClick={onClick} 
+                    className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"
+                >
+                    <div className={`relative w-6 h-6 flex items-center justify-center transition-all duration-300 active:scale-90 ${
+                        active ? 'scale-105' : 'scale-100'
+                    }`}>
+                        <div className={`absolute inset-0 rotate-45 border transition-all duration-500 rounded-[3px] ${
+                            active 
+                                ? 'border-[#c9a76b] bg-[#c9a76b]/15 shadow-[0_0_10px_rgba(201,167,107,0.4)]' 
+                                : 'border-[#2d281f] bg-[#12110e]/80 group-hover:border-gray-500'
+                        }`} />
+
+                        {active && (
+                            <div className="absolute inset-0 rotate-45 border border-[#c9a76b]/40 rounded-[3px] scale-125 pointer-events-none" />
+                        )}
+
+                        <div className="z-10">
+                            <i className={`${iconClass} text-xs pb-2 ${active ? 'text-[#c9a76b]' : 'text-gray-400'}`}></i>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
-    );
-}
 
-function InkRingButton({ iconClass, onClick, active, label, isGlowing = false }) {
-    return (
-        <button 
-            onClick={onClick} 
-            className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"
-        >
-            <div className={`relative w-6 h-6 flex items-center justify-center transition-all duration-300 active:scale-90 ${
-                active ? 'scale-105' : 'scale-100'
-            }`}>
-                {/* 八角/菱形國風邊框 */}
-                <div className={`absolute inset-0 rotate-45 border transition-all duration-500 rounded-[3px] ${
-                    active 
-                        ? 'border-[#c9a76b] bg-[#c9a76b]/15 shadow-[0_0_10px_rgba(201,167,107,0.4)]' 
-                        : 'border-[#2d281f] bg-[#12110e]/80 group-hover:border-gray-500'
-                }`} />
+                    <span className={`text-[9px] mt-1 tracking-wider transition-all ${
+                        isGlowing 
+                            ? 'text-[#fff5d1] font-bold drop-shadow-[0_0_8px_rgba(201,167,107,1)] animate-pulse' 
+                            : active ? 'text-[#c9a76b]' : 'text-gray-400'
+                    }`}>
+                        {label}
+                    </span>
+                </button>
+            );
+        }
 
-                {/* 四角點綴點 */}
-                {active && (
-                    <div className="absolute inset-0 rotate-45 border border-[#c9a76b]/40 rounded-[3px] scale-125 pointer-events-none" />
-                )}
-
-                {/* 圖示 */}
-                <div className="z-10">
-                    <i className={`${iconClass} text-xs pb-2 ${active ? 'text-[#c9a76b]' : 'text-gray-400'}`}></i>
-                </div>
-            </div>
-
-            <span className={`text-[9px] mt-1 tracking-wider transition-all ${
-                isGlowing 
-                    ? 'text-[#fff5d1] font-bold drop-shadow-[0_0_8px_rgba(201,167,107,1)] animate-pulse' 
-                    : active ? 'text-[#c9a76b]' : 'text-gray-400'
-            }`}>
-                {label}
-            </span>
-        </button>
-    );
-}
-
-
-        // 啟動 React (並套用 viewport-container 讓桌面版能自動維持 16:9 比例)
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(
             <div className="viewport-container">
