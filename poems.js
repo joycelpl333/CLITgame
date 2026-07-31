@@ -340,7 +340,7 @@ hotspots: [
   },
   {
     id: "doueyuan",
-    title: "竇娥冤．法場）",
+    title: "竇娥冤．法場",
     author: "關漢卿",
     bgImage: "./doueyuan.webp",
     fullText: [
