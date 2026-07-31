@@ -390,16 +390,6 @@ const SM = new SoundManager();
                 setCurrentPage('home');
             };
 
-            const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; };
-            const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; };
-            const handleTouchEnd = () => {
-                const diff = touchStartX.current - touchEndX.current;
-                if (Math.abs(diff) > 80) { 
-                    if (diff > 0 && homeTab === 'game') { setHomeTab('reading'); triggerToast("切換至：閱讀模式"); } 
-                    else if (diff < 0 && homeTab === 'reading') { setHomeTab('game'); triggerToast("切換至：探索模式"); }
-                }
-            };
-
             const getCardFontClasses = () => {
                 if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
                 if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
