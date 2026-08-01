@@ -12,7 +12,8 @@
 
     <!-- 引入 Tailwind CSS 進行國風排版 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+    <!-- 引入 YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
     <!-- 引入 React 與 ReactDOM 核心 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -220,7 +221,37 @@
             this.ambientWind.loop = true;
             this.ambientWind.volume = 0.7;
             this.currentAmbience = null;
+            // 新增一個屬性來儲存音量漸變的計時器
+            this.ytFadeInterval = null;
           }
+
+	// 🌟 新增這個漸變控制函數
+    fadeYouTubeVolume(targetVolume, duration = 1000) {
+        const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
+        if (!player || typeof player.getVolume !== 'function') return;
+
+        // 清除之前的漸變計時器，避免快速來回點擊造成衝突
+        if (this.ytFadeInterval) clearInterval(this.ytFadeInterval);
+
+        let currentVolume = player.getVolume();
+        const steps = 20; // 將漸變分為 20 步
+        const intervalTime = duration / steps;
+        const volumeStep = (targetVolume - currentVolume) / steps;
+
+        this.ytFadeInterval = setInterval(() => {
+            currentVolume += volumeStep;
+            
+            // 檢查是否已達到或超過目標音量
+            if ((volumeStep > 0 && currentVolume >= targetVolume) || 
+                (volumeStep < 0 && currentVolume <= targetVolume)) {
+                player.setVolume(targetVolume);
+                clearInterval(this.ytFadeInterval);
+            } else {
+                player.setVolume(Math.round(currentVolume));
+            }
+        }, intervalTime);
+    }
+
           playSFX(name, volume = 1) {
             if (this.sfx[name]) {
               const soundClone = this.sfx[name].cloneNode();
@@ -232,9 +263,8 @@
             this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
           }
           enterGameMode(audioSrc) {
-            if (window.ytPlayer && window.ytPlayer.setVolume) {
-              window.ytPlayer.setVolume(20);
-            }
+            this.fadeYouTubeVolume(20, 1500);
+            
             if (audioSrc) {
               if (this.currentAmbience) {
                 this.currentAmbience.pause();
@@ -246,9 +276,8 @@
             }
           }
           exitGameMode() {
-            if (window.ytPlayer && window.ytPlayer.setVolume) {
-              window.ytPlayer.setVolume(100);
-            }
+            this.fadeYouTubeVolume(100, 1500);
+            
             if (this.currentAmbience) {
               this.currentAmbience.pause();
               this.currentAmbience = null;
@@ -363,6 +392,17 @@ function App() {
         }
         document.body.removeChild(textArea);
     };
+
+useEffect(() => {
+    const player = window.ytPlayer || ytPlayer;
+    if (player && typeof player.playVideo === 'function') {
+        if (audioSettings.bgm) {
+            player.playVideo(); // 開啟音樂
+        } else {
+            player.pauseVideo(); // 關閉音樂
+        }
+    }
+}, [audioSettings.bgm]);
 
     // 🌟 1. 一進入 App (Start 頁面) 即開始背景預載
     useEffect(() => {
@@ -538,6 +578,10 @@ function App() {
 // 🌟 2. 渲染邏輯整合
     const renderPageContent = () => {
 if (currentPage === 'start') {
+	const handleStartClick = () => {
+        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+        startGame();
+    };
         return (
             <>
                 {renderPreloadContainer()}
@@ -598,7 +642,11 @@ if (currentPage === 'start') {
                                             const isUnlocked = unlockedPoems.includes(poem.id);
                                             const isCompleted = isUnlocked && poem.hotspots.length > 0;
                                             return (
-                                                <div key={poem.id} onClick={() => openPoem(poem.id)} className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
+                                                <div key={poem.id} onClick={() => {
+                    if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                    openPoem(poem.id);
+                }}
+ className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
                                                     <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
                                                         {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
                                                     </div>
@@ -631,7 +679,11 @@ if (currentPage === 'start') {
                                         {POEMS.map((poem) => {
                                             const isExplored = unlockedPoems.includes(poem.id);
                                             return (
-                                                <div key={poem.id} onClick={() => setReadingPoem(poem)} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
+                                                <div key={poem.id} onClick={() => {
+if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                    setReadingPoem(poem);
+                }}
+ className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
                                                     <div>
                                                         <div className="flex items-center gap-2">
                                                             <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
@@ -694,7 +746,13 @@ if (currentPage === 'start') {
 
                                                 return (
                                                     <div 
-                                                        key={poem.id} 
+                                                        key={poem.id}
+ /* 🌟 點擊印章時播放音效：解鎖播放 stamp，未解鎖播放 click */
+                            onClick={() => {
+                                if (window.SM || typeof SM !== 'undefined') {
+                                    SM.playSFX(isUnlocked ? 'stamp' : 'click');
+                                }
+                            }}
                                                         className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors duration-200 relative overflow-hidden ${
                                                             isUnlocked 
                                                                 ? 'bg-[#161310] border-[#3a3224] shadow-md group hover:border-[#c9a76b]/50' 
@@ -844,24 +902,72 @@ if (currentPage === 'start') {
                                     <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
                                         <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
                                         <div className="space-y-4 mb-6 px-1">
-                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, bgm: !audioSettings.bgm})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span><button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} onClick={() => setAudioSettings({...audioSettings, sfx: !audioSettings.sfx})}><div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+{/* 背景音樂開關 */}
+                <div className="flex justify-between items-center">
+                    <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
+                    <button 
+                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
+                        onClick={() => {
+                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                            setAudioSettings({...audioSettings, bgm: !audioSettings.bgm});
+                        }}
+                    >
+                	<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
+{/* 環境音效開關 */}
+                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
+<button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
+onClick={() => {
+                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                            setAudioSettings({...audioSettings, sfx: !audioSettings.sfx});
+                        }}>
+<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
                                         </div>
-                                        <div className="pt-2">
-                                            <div className="flex justify-between items-center mb-1.5"><span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span><span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span></div>
-                                            <div className="flex gap-2.5">{['sm', 'md', 'lg'].map(sz => <button key={sz} onClick={() => setFontSize(sz)} className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}>{sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}</button>)}</div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
-                                            {!confirmReset ? (
-                                                <button className="w-full py-1.5 rounded text-xs text-red-400 border border-red-900/50 hover:bg-red-950/30 tracking-widest" onClick={() => setConfirmReset(true)}>重置遊戲進度</button>
-                                            ) : (
+                                        {/* 字體大小選擇 */}
+            <div className="pt-2">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span>
+                    <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span>
+                </div>
+                <div className="flex gap-2.5">
+                    {['sm', 'md', 'lg'].map(sz => (
+                        <button 
+                            key={sz} 
+                            onClick={() => {
+                                if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                                setFontSize(sz);
+                            }} 
+                            className={`flex-1 py-1 rounded text-[10px] tracking-widest transition-all clickable-hotspot border ${fontSize === sz ? 'bg-[#c9a76b]/20 border-[#c9a76b] text-[#c9a76b]' : 'bg-transparent border-[#2d281f] text-gray-500'}`}
+                        >
+                            {sz === 'sm' ? '小' : sz === 'md' ? '中' : '大'}
+                        </button>
+                    ))}
+                </div>
+            </div>
+{/* 重置與關閉按鈕 */}
+            <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
+                {!confirmReset ? (
+                    <button 
+                        className="w-full py-1.5 rounded text-xs text-red-400 border border-red-900/50 hover:bg-red-950/30 tracking-widest clickable-hotspot" 
+                        onClick={() => {
+                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                            setConfirmReset(true);
+                        }}
+                    >
+                        重置遊戲進度
+                    </button>
+                ) : (
                                                 <div className="flex gap-2">
-                                                    <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold" onClick={() => { setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
-                                                    <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300" onClick={() => setConfirmReset(false)}>取消</button>
+                                                    <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold clickable-hotspot" onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
+                                                    <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300 clickable-hotspot" onClick={() => {
+                                if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                                setConfirmReset(false);
+                            }}>取消</button>
                                                 </div>
                                             )}
-                                            <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" onClick={() => setShowSettings(false)}>關閉</button>
+                                            <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" 
+onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                        setShowSettings(false);
+                    }}>關閉</button>
                                         </div>
                                     </div>
                                 </div>
@@ -871,7 +977,7 @@ if (currentPage === 'start') {
 {readingPoem && (
                             <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
                                 <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
-                                    <button onClick={() => setReadingPoem(null)} className="p-2 clickable-hotspot">
+                                    <button onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setReadingPoem(null);}} className="p-2 clickable-hotspot">
                                         <i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i>
                                     </button>
                                     
@@ -882,7 +988,7 @@ if (currentPage === 'start') {
 
                                     {/* 【修改】右上角新增複製按鈕 */}
                                     <button 
-                                        onClick={() => handleCopyPoem(readingPoem)} 
+                                        onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); handleCopyPoem(readingPoem);}} 
                                         className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center"
                                         title="複製全文"
                                     >
@@ -911,10 +1017,10 @@ if (currentPage === 'start') {
 
                         <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col py-0.5 pb-1.5 border-t border-[#2d281f]/40">
                             <div className="flex justify-around items-center px-4 w-full h-12">
-                                <InkRingButton iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
-                                <InkRingButton iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
-                                <InkRingButton iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
-                                <InkRingButton iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
+                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')} iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
+                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
+                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
+                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
                             </div>
                         </div>
 
@@ -973,29 +1079,50 @@ return (
                 if (isEntryGlowing) setIsEntryGlowing(false);
             };
 
-            const handleHotspotClick = (index, e) => {
-                e.stopPropagation();
-                handleGlobalClick();
+const handleHotspotClick = (index, e) => {
+    e.stopPropagation();
+    handleGlobalClick();
 
-                if (index === currentStep) {
-                    const rect = e.currentTarget.getBoundingClientRect(); 
-                    const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: true });
-                    setTimeout(() => { 
-                        if (currentStep + 1 >= poem.hotspots.length) setShowCompletion(true); 
-                        else setCurrentStep(currentStep + 1); 
-                        setClickedPos(null); 
-                    }, 700);
-                } else if (index > currentStep) {
-                    setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
-                    setIsShaking(true); 
-                    setTimeout(() => setIsShaking(false), 400);
-                    const rect = e.currentTarget.getBoundingClientRect(); 
-                    const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
-                    setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: false });
-                    setTimeout(() => setClickedPos(null), 400);
-                }
-            };
+    // 💡 1. 先用傳進來的 index 取得當前點擊的 hotspot 物件
+    const hotspot = poem.hotspots[index];
+
+    // 💡 2. 安全解析 slidesData（相容單頁舊格式與多頁 slides 新格式）
+    const slidesData = hotspot?.slides || [
+        { 
+            text: hotspot?.label, 
+            cantoneseLabel: hotspot?.cantoneseLabel, 
+            cantoneseDesc: hotspot?.cantoneseDesc 
+        }
+    ];
+
+    console.log("當前 Hotspot 資料：", slidesData);
+
+    if (index === currentStep) {
+        const rect = e.currentTarget.getBoundingClientRect(); 
+        const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+        setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: true });
+        
+        setTimeout(() => { 
+            if (currentStep + 1 >= poem.hotspots.length) {
+                setShowCompletion(true);
+                handleStampAction(); // 👈 觸發印章音效
+            } else {
+                setCurrentStep(currentStep + 1);
+            } 
+            setClickedPos(null); 
+        }, 700);
+    } else if (index > currentStep) {
+        setMistakes(prev => ({ ...prev, [currentStep]: (prev[currentStep] || 0) + 1 }));
+        setIsShaking(true); 
+        setTimeout(() => setIsShaking(false), 400);
+        
+        const rect = e.currentTarget.getBoundingClientRect(); 
+        const parentRect = e.currentTarget.offsetParent.getBoundingClientRect();
+        setClickedPos({ x: rect.left + rect.width/2 - parentRect.left, y: rect.top + rect.height/2 - parentRect.top, success: false });
+        
+        setTimeout(() => setClickedPos(null), 400);
+    }
+};
 
             const handleBackgroundClick = (e) => {
                 handleGlobalClick();
@@ -1006,12 +1133,17 @@ return (
                 setClickedPos({ x: e.clientX - parentRect.left, y: e.clientY - parentRect.top, success: false });
                 setTimeout(() => setClickedPos(null), 400);
             };
-
+// 🌟 1. 音效開關加入按鈕點擊聲 (click)
             const toggleSound = () => {
+                if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                 if (onToggleSound) onToggleSound();
                 else setSoundEnabled(!soundEnabled);
                 triggerToast(!soundEnabled ? "音效已開啟" : "靜音模式");
             };
+// 🌟 2. 觸發蓋章動作時加入印章聲 (stamp)
+const handleStampAction = () => {
+    if (window.SM || typeof SM !== 'undefined') SM.playSFX('stamp');
+};
 
             const currentSpot = poem.hotspots[currentStep] || {};
 
@@ -1112,6 +1244,9 @@ return (
                     <div className="absolute bottom-0 left-0 w-full bg-[#0a0a09]/75 flex flex-col py-1 pb-1.5 border-t border-[#2d281f]/40 z-20">
                         <div className="flex justify-around items-center px-2 w-full h-11">
                             <InkRingButton 
+                                sfxType="click" 
+                                label="點擊音效" 
+                                onClick={toggleSound}
                                 iconClass={showHotspotHints ? "fa-solid fa-lightbulb text-[#c9a76b]" : "fa-regular fa-lightbulb"} 
                                 active={showHotspotHints} 
                                 onClick={() => {
@@ -1123,6 +1258,9 @@ return (
                             />
 
                             <InkRingButton 
+                                sfxType="click" 
+                                label="點擊音效" 
+                                onClick={toggleSound}
                                 iconClass={`fa-solid ${showSubtitle ? 'fa-eye text-[#c9a76b]' : 'fa-eye-slash text-gray-400'}`}
                                 active={showSubtitle} 
                                 isGlowing={isEntryGlowing}
@@ -1142,6 +1280,9 @@ return (
                             </div>
 
                             <InkRingButton 
+                                sfxType="click" 
+                                label="點擊音效" 
+                                onClick={toggleSound}
                                 iconClass={soundEnabled ? "fa-solid fa-volume-high text-[#c9a76b]" : "fa-solid fa-volume-xmark text-gray-500"} 
                                 active={soundEnabled} 
                                 onClick={toggleSound} 
@@ -1149,6 +1290,9 @@ return (
                             />
 
                             <InkRingButton 
+                                sfxType="click" 
+                                label="點擊音效" 
+                                onClick={toggleSound}
                                 iconClass="fa-solid fa-scroll text-[#c9a76b]" 
                                 active={showInterpretation} 
                                 onClick={() => {
@@ -1257,6 +1401,13 @@ return (
         }
 
         function InkRingButton({ iconClass, onClick, active, label, isGlowing = false }) {
+// 🌟 包裝點擊事件，先播放音效再執行原本的 onClick
+    const handleClick = (e) => {
+        if (window.SM || typeof SM !== 'undefined') {
+            SM.playSFX(sfxType);
+        }
+        if (onClick) onClick(e);
+    };
             return (
                 <button 
                     onClick={onClick} 
