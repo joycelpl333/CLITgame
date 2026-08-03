@@ -389,20 +389,19 @@ class SoundManager {
         this.currentAmbience = null;
         this.ytFadeInterval = null;
         
-        // 狀態管理
         this.bgmMuted = false;
-        this.userBgmVolume = 100; // 獨立儲存玩家在搖桿上設定的基礎音量
-        this.sfxMuted = false;    // 預設為開啟 (false)
-        this.isGameMode = false;  // 記錄是否處於閱讀模式
+        this.userBgmVolume = 100; 
+        this.sfxMuted = false;    
+        this.isGameMode = false;  
     }
 
     applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
         this.bgmMuted = !bgm;
-        this.userBgmVolume = bgmVolume;
+        // 確保搖桿傳來的值絕對是數字
+        this.userBgmVolume = Number(bgmVolume) || 0; 
         this.sfxMuted = !sfx;
 
-        // 🌟 修正 1：當玩家手動調整滑竿時，立即清除 YT 淡出定時器，優先響應滑竿
-        if (this.ytFadeInterval) {
+        if (isManualUpdate && this.ytFadeInterval) {
             clearInterval(this.ytFadeInterval);
             this.ytFadeInterval = null;
         }
@@ -410,36 +409,35 @@ class SoundManager {
         this.updateActualVolume();
     }
 
-    // 根據當前狀態更新實際輸出的音量
     updateActualVolume() {
         const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
 
-        // 🌟 修正 2：關卡背景音樂 (currentAmbience) 屬於 BGM，永遠隨時即時更新音量與靜音
+        // 1. 即時更新關卡音樂 (BGM)
         if (this.currentAmbience) {
             this.currentAmbience.muted = this.bgmMuted;
-            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
-            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
+            let vol = (targetVol / 100) * 0.9;
+            // 🌟 加入邊界防護，防止音量大於1或小於0導致瀏覽器報錯失效
+            this.currentAmbience.volume = Math.max(0, Math.min(1, vol)); 
         }
 
-        // 🌟 修正 3：如果 YT 淡出定時器還在運作，只暫停對 YT 的強制設定，不影響關卡音樂
+        // 2. 如果 YT 正在執行淡入淡出動畫，先不要強行覆蓋它的音量
         if (this.ytFadeInterval) return;
 
-        // 如果在遊戲內，YouTube 音量縮小至設定值的 20%
+        // 3. 即時更新 YouTube (遊戲內維持20%襯底) 與後備風聲
         const ytVol = this.isGameMode ? targetVol * 0.2 : targetVol;
 
-        // 如果目前是播放後備風聲，套用 BGM 的音量
         if (this.ambientWind) {
-            this.ambientWind.volume = (ytVol / 100) * 0.7;
+            let windVol = (ytVol / 100) * 0.7;
+            this.ambientWind.volume = Math.max(0, Math.min(1, windVol));
             this.ambientWind.muted = this.bgmMuted;
         }
         
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (player && typeof player.setVolume === 'function') {
-            player.setVolume(ytVol);
+            player.setVolume(Math.max(0, Math.round(ytVol)));
         }
     }
 
-    // 淡入淡出邏輯，只改變硬體播放音量
     fadeYouTubeVolume(targetRatio, duration = 1000) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (!player || typeof player.getVolume !== 'function') return;
@@ -453,7 +451,7 @@ class SoundManager {
         }
 
         let currentVolume = player.getVolume();
-        const targetVolume = this.userBgmVolume * targetRatio;
+        const targetVolume = this.userBgmVolume * targetRatio; 
         const steps = 20; 
         const intervalTime = duration / steps;
         const volumeStep = (targetVolume - currentVolume) / steps;
@@ -464,15 +462,21 @@ class SoundManager {
             if ((volumeStep > 0 && currentVolume >= targetVolume) || 
                 (volumeStep < 0 && currentVolume <= targetVolume)) {
                 
-                player.setVolume(targetVolume);
-                if (this.ambientWind) this.ambientWind.volume = (targetVolume / 100) * 0.7;
+                player.setVolume(Math.max(0, Math.round(targetVolume)));
+                if (this.ambientWind) {
+                    let windVol = (targetVolume / 100) * 0.7;
+                    this.ambientWind.volume = Math.max(0, Math.min(1, windVol));
+                }
                 
                 clearInterval(this.ytFadeInterval);
                 this.ytFadeInterval = null;
             } else {
-                const stepVol = Math.round(currentVolume);
+                const stepVol = Math.max(0, Math.round(currentVolume));
                 player.setVolume(stepVol);
-                if (this.ambientWind) this.ambientWind.volume = (stepVol / 100) * 0.7;
+                if (this.ambientWind) {
+                    let windVol = (stepVol / 100) * 0.7;
+                    this.ambientWind.volume = Math.max(0, Math.min(1, windVol));
+                }
             }
         }, intervalTime);
     }
@@ -481,7 +485,7 @@ class SoundManager {
         if (this.sfxMuted) return; 
         if (this.sfx[name]) {
             const soundClone = this.sfx[name].cloneNode();
-            soundClone.volume = volume;
+            soundClone.volume = Math.max(0, Math.min(1, volume));
             soundClone.play().catch(e => console.log('音效播放受限:', e));
         }
     }
@@ -489,7 +493,8 @@ class SoundManager {
     startAmbient() {
         if (window.ytError) {
             const targetVol = this.bgmMuted ? 0 : (this.isGameMode ? this.userBgmVolume * 0.2 : this.userBgmVolume);
-            this.ambientWind.volume = (targetVol / 100) * 0.7;
+            let windVol = (targetVol / 100) * 0.7;
+            this.ambientWind.volume = Math.max(0, Math.min(1, windVol));
             this.ambientWind.muted = this.bgmMuted;
             this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
         }
@@ -504,16 +509,19 @@ class SoundManager {
             this.currentAmbience.loop = true;
             this.currentAmbience.muted = this.bgmMuted;
             const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-            this.currentAmbience.volume = (targetVol / 100) * 0.9;
+            let vol = (targetVol / 100) * 0.9;
+            this.currentAmbience.volume = Math.max(0, Math.min(1, vol));
             this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
         }
 
-        this.fadeYouTubeVolume(0.2, 1500);
+        // 觸發 YouTube 淡出到 20%
+        this.fadeYouTubeVolume(0.2, 1500); 
     }
 
     exitGameMode() {
         this.isGameMode = false;
-        this.fadeYouTubeVolume(1.0, 1500);
+        // 觸發 YouTube 淡入回 100%
+        this.fadeYouTubeVolume(1.0, 1500); 
 
         if (this.currentAmbience) {
             this.currentAmbience.pause();
@@ -522,7 +530,9 @@ class SoundManager {
     }
 }
 
-const SM = new SoundManager();
+// 記得全域宣告覆蓋
+window.SM = new SoundManager();
+        
 
         function LoadingOverlay({ isLoading }) {
  	   if (!isLoading) return null;
@@ -669,96 +679,47 @@ function App() {
         return () => clearTimeout(timer); // 清理定時器
     }, [homeTab, showMenu, showSettings]);
 
-	// 🌟 背景音樂（BGM）音量與靜音全域同步控制
+// 🌟 1. 監聽搖桿設定與靜音 (只負責同步設定，不要干擾進入關卡的邏輯)
 useEffect(() => {
-    // 計算實際音量：如果靜音 (bgm: false) 則音量為 0，否則為 bgmVolume
-    const effectiveVolume = audioSettings.bgm ? audioSettings.bgmVolume : 0;
-    
-    // 1. 同步給 SoundManager (影響遊戲關卡背景音樂)
+    // 同步設定給 SoundManager，SM 內部會自動處理 YT (20%) 與 關卡音樂 (90%) 的音量分配
     if (window.SM) {
-        SM.userBgmVolume = effectiveVolume; // 更新全域紀錄
-        
-        // 如果 SM 有提供直接調整當前播放中 BGM 音量的方法
-        if (typeof SM.setBgmVolume === 'function') {
-            SM.setBgmVolume(effectiveVolume);
-        } else if (typeof SM.setVolume === 'function') {
-            SM.setVolume('bgm', effectiveVolume);
-        }
+        // 確保傳入的是數字，避免字串引發錯誤
+        window.SM.applySettings(audioSettings.bgm, Number(audioSettings.bgmVolume), audioSettings.sfx, true);
     }
-
-    // 2. 同步給 YouTube 播放器 (影響 Home 頁面背景音樂)
-    const player = window.ytPlayer;
-    if (player && typeof player.setVolume === 'function') {
-        try {
-            if (effectiveVolume === 0) {
-                player.mute();
-            } else {
-                player.unMute();
-                player.setVolume(effectiveVolume);
-            }
-        } catch (e) {
-            console.warn("YouTube 音量同步失敗", e);
-        }
-    }
-}, [audioSettings.bgm, audioSettings.bgmVolume]); // 只要靜音狀態或音量值改變就立即觸發
-	
-// 🌟 處理頁面切換時的音樂互斥（進入關卡暫停 YT，離開關卡恢復 YT）
-useEffect(() => {
+    
+    // 只有在「完全靜音」或「音量為0」時才真正暫停 YT 以節省資源，否則保持播放
     const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
-
-    // ==========================================
-    // 情境 A：進入遊戲關卡
-    // ==========================================
-    if (currentPage === 'game') {
-        // 1. 強制暫停 YouTube 主音樂，絕不讓它在背景當襯底！
-        if (player && typeof player.pauseVideo === 'function') {
-            try { player.pauseVideo(); } catch(e) { console.warn("Pause YT 失敗", e); }
-        }
-
-        // 2. 播放關卡背景音樂 (由 SoundManager 負責)
-        if (window.SM && currentPoemId && typeof SM.playPoemBgm === 'function') {
-            SM.playPoemBgm(currentPoemId, audioSettings.bgm ? audioSettings.bgmVolume : 0);
-        }
-    } 
-    // ==========================================
-    // 情境 B：離開關卡返回 Home 或 Start 頁面
-    // ==========================================
-    else if (currentPage === 'home' || currentPage === 'start') {
-        
-        // 1. 讓關卡專屬音樂/音效淡出或停止
-        if (window.SM) {
-            if (typeof SM.stopPoemBgm === 'function') {
-                SM.stopPoemBgm(); // 停止關卡音樂
-            } else if (typeof SM.fadeOutBgm === 'function') {
-                SM.fadeOutBgm();  // 或淡出音樂
-            }
-        }
-
-        // 2. 切換/恢復 YouTube 主音樂
-        if (player && typeof player.playVideo === 'function' && !window.ytError) {
-            try {
-                if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
-                    player.unMute();
-                    player.setVolume(audioSettings.bgmVolume || 100);
-                    player.playVideo();
-                } else {
-                    player.pauseVideo();
-                }
-            } catch (e) {
-                console.warn("恢復 YouTube 播放受阻，切換至備用音效", e);
-                window.ytError = true;
-                if (window.SM && typeof SM.startAmbient === 'function') {
-                    SM.startAmbient();
-                }
-            }
+    if (player && typeof player.playVideo === 'function' && !window.ytError) {
+        if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
+            player.playVideo(); 
         } else {
-            // YT 失效時的後備音效
-            if (window.SM && typeof SM.startAmbient === 'function') {
-                SM.startAmbient();
-            }
+            player.pauseVideo(); 
         }
     }
-}, [currentPage, currentPoemId]); // 👈 監聽 currentPage 與 currentPoemId 變化
+}, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
+
+// 🌟 2. 離開關卡返回 Home 時，恢復全域狀態
+useEffect(() => {
+    if (currentPage === 'home' || currentPage === 'start') {
+        
+        // 呼叫退出關卡模式 (這會自動將 YT 音量淡入回 1.0 比例，並停止關卡音樂)
+        if (window.SM && typeof window.SM.exitGameMode === 'function') {
+            window.SM.exitGameMode();
+        }
+
+        // 確保 YT 影片有正確在主頁播放
+        const player = window.ytPlayer;
+        if (player && typeof player.playVideo === 'function' && !window.ytError) {
+            if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
+                player.playVideo();
+            }
+        } else if (window.ytError && window.SM) {
+            window.SM.startAmbient();
+        }
+    }
+}, [currentPage]);
+	
+
 
 	// 🌟 離開關卡回到主頁的處理函數
 const handleBackToHome = () => {
