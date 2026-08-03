@@ -282,14 +282,14 @@ transform: translateZ(0);
         }
 
         let ytPlayer;
-        function onYouTubeIframeAPIReady() {
+window.onYouTubeIframeAPIReady = function() {
           window.ytError = false;
           ytPlayer = new YT.Player('yt-player', {
             height: '0', width: '0', videoId: '11pvOw2DZ58',
             playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '11pvOw2DZ58' },
             events: {
               'onReady': (event) => {
-                window.ytPlayer = event.target;
+                event.target.unMute();
                 event.target.setVolume(100);
             },
             'onError': (event) => {
@@ -351,7 +351,11 @@ class SoundManager {
             this.ambientWind.volume = (ytVol / 100) * 0.7;
             this.ambientWind.muted = this.bgmMuted;
         }
-        
+        if (this.currentAmbience) {
+            this.currentAmbience.muted = this.bgmMuted;
+            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
+            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
+        }
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (player && typeof player.setVolume === 'function') {
             player.setVolume(ytVol);
@@ -423,8 +427,9 @@ class SoundManager {
             if (this.currentAmbience) this.currentAmbience.pause();
             this.currentAmbience = new Audio(audioSrc);
             this.currentAmbience.loop = true;
-            this.currentAmbience.muted = this.sfxMuted; // 綁定環境音效開關
-            this.currentAmbience.volume = 0.9;
+            this.currentAmbience.muted = this.bgmMuted;
+            const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
+            this.currentAmbience.volume = (targetVol / 100) * 0.9;
             this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
         }
     }
@@ -681,13 +686,14 @@ useEffect(() => {
 
     // 🌟 2. 點擊開始按鈕
     const startGame = () => {
-        const player = window.ytPlayer || ytPlayer;
+        const player = window.ytPlayer;
         if (player && typeof player.playVideo === 'function' && !window.ytError) {
             try {
                 player.unMute();
-                player.setVolume(SM.userBgmVolume); // 改為讀取基礎音量
+                player.setVolume(SM.userBgmVolume|| 100); // 改為讀取基礎音量
                 player.playVideo();
             } catch(e) {
+                console.warn("YouTube 播放受到瀏覽器阻擋", e);
                 window.ytError = true;
                 SM.startAmbient();
             }
@@ -698,7 +704,6 @@ useEffect(() => {
         }
 
         SM.playSFX('click', 0.8);
-
         setIsLeavingStart(true);
         setTimeout(() => {
             // 若在 Start 頁面停留期間資產已預載完成，直接轉至 home；否則進入 loading 頁面等待
@@ -1519,8 +1524,6 @@ const handleStampAction = () => {
                         <div className="flex justify-around items-center px-2 w-full h-11">
                             <InkRingButton 
                                 sfxType="click" 
-                                label="點擊音效" 
-                                onClick={toggleSound}
                                 iconClass={showHotspotHints ? "fa-solid fa-lightbulb text-[#c9a76b]" : "fa-regular fa-lightbulb"} 
                                 active={showHotspotHints} 
                                 onClick={() => {
@@ -1533,8 +1536,6 @@ const handleStampAction = () => {
 
                             <InkRingButton 
                                 sfxType="click" 
-                                label="點擊音效" 
-                                onClick={toggleSound}
                                 iconClass={`fa-solid ${showSubtitle ? 'fa-eye text-[#c9a76b]' : 'fa-eye-slash text-gray-400'}`}
                                 active={showSubtitle} 
                                 isGlowing={isEntryGlowing}
@@ -1555,8 +1556,6 @@ const handleStampAction = () => {
 
                             <InkRingButton 
                                 sfxType="click" 
-                                label="點擊音效" 
-                                onClick={toggleSound}
                                 iconClass="fa-solid fa-scroll text-[#c9a76b]" 
                                 active={showInterpretation} 
                                 onClick={() => {
@@ -1568,7 +1567,6 @@ const handleStampAction = () => {
 
                             <InkRingButton 
                                 sfxType="click" 
-                                label="點擊音效" 
                                 iconClass={!isAllMuted ? "fa-solid fa-volume-high text-[#c9a76b]" : "fa-solid fa-volume-xmark text-gray-500"} 
                                 active={!isAllMuted}
                                 onClick={() => setShowGameSettings(true)}> 設定</InkRingButton>
@@ -1751,20 +1749,22 @@ const handleStampAction = () => {
 }
 
 
-function InkRingButton({ iconClass, onClick, active, label, isGlowing = false, sfxType = 'click' }) { // 👈 補上 sfxType 的預設值
+function InkRingButton({ iconClass, onClick, active, label, isGlowing = false, sfxType = 'click', ...props }) {
     
     // 🌟 包裝點擊事件，先播放音效再執行原本的 onClick
     const handleClick = (e) => {
-        if (window.SM || typeof SM !== 'undefined') {
-            SM.playSFX(sfxType);
+        if (sfxType && window.SM) {
+            window.SM.playSFX(sfxType);
         }
-        if (onClick) onClick(e);
+        if (onClick) {
+            onClick(e);
+        }
     };
 
     return (
         <button 
-            onClick={handleClick}  // 👈 這裡必須改成 handleClick，音效才會生效
-            className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"
+            onClick={handleClick} 
+            className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"{...props}
         >
             <div className={`relative w-6 h-6 flex items-center justify-center transition-all duration-300 active:scale-90 ${
                 active ? 'scale-105' : 'scale-100'
