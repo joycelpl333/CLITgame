@@ -683,13 +683,13 @@ useEffect(() => {
         const currentIndex = POEMS.findIndex(p => p.id === readingPoem.id);
         if (currentIndex === -1) return;
 
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (e.key === 'ArrowLeft') {
             e.preventDefault(); // 防止畫面跟著捲動
             const prevIndex = currentIndex > 0 ? currentIndex - 1 : POEMS.length - 1;
             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
             setReadingPoem(POEMS[prevIndex]);
         } 
-        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        else if (e.key === 'ArrowRight') {
             e.preventDefault();
             const nextIndex = currentIndex < POEMS.length - 1 ? currentIndex + 1 : 0;
             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
@@ -702,7 +702,7 @@ useEffect(() => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-}, [readingPoem]); // 依賴項為 readingPoem，當它改變時重新綁定
+}, [readingPoem]); 
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
@@ -1448,7 +1448,7 @@ onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
 </button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10">
+                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10 scroll-smooth">
                                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                                     
                                     {/* 【修改】加上 fullText select-text 允許手動劃選文字 */}
@@ -1829,7 +1829,7 @@ onKeyDown={(e) => {
                     )}
 
                     {showCompletion && (
-                        <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
+                        <div className="absolute inset-0 bg-black/65 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
                             <div className="relative w-full max-w-[280px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-6 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.2)]">
                                 <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
                                 <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
