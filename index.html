@@ -668,12 +668,63 @@ function App() {
         return () => clearTimeout(timer); // 清理定時器
     }, [homeTab, showMenu, showSettings]);
 
-// 🌟 離開關卡返回 Home 時，淡出關卡音樂並恢復 YouTube 主音樂
+	// 🌟 背景音樂（BGM）音量與靜音全域同步控制
 useEffect(() => {
-    // 當頁面切換回到 home 時觸發
-    if (currentPage === 'home') {
+    // 計算實際音量：如果靜音 (bgm: false) 則音量為 0，否則為 bgmVolume
+    const effectiveVolume = audioSettings.bgm ? audioSettings.bgmVolume : 0;
+    
+    // 1. 同步給 SoundManager (影響遊戲關卡背景音樂)
+    if (window.SM) {
+        SM.userBgmVolume = effectiveVolume; // 更新全域紀錄
         
-        // 1. 讓關卡專屬音樂/音效淡出或停止 (根據你的 SoundManager 方法名稱)
+        // 如果 SM 有提供直接調整當前播放中 BGM 音量的方法
+        if (typeof SM.setBgmVolume === 'function') {
+            SM.setBgmVolume(effectiveVolume);
+        } else if (typeof SM.setVolume === 'function') {
+            SM.setVolume('bgm', effectiveVolume);
+        }
+    }
+
+    // 2. 同步給 YouTube 播放器 (影響 Home 頁面背景音樂)
+    const player = window.ytPlayer;
+    if (player && typeof player.setVolume === 'function') {
+        try {
+            if (effectiveVolume === 0) {
+                player.mute();
+            } else {
+                player.unMute();
+                player.setVolume(effectiveVolume);
+            }
+        } catch (e) {
+            console.warn("YouTube 音量同步失敗", e);
+        }
+    }
+}, [audioSettings.bgm, audioSettings.bgmVolume]); // 只要靜音狀態或音量值改變就立即觸發
+	
+// 🌟 處理頁面切換時的音樂互斥（進入關卡暫停 YT，離開關卡恢復 YT）
+useEffect(() => {
+    const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
+
+    // ==========================================
+    // 情境 A：進入遊戲關卡
+    // ==========================================
+    if (currentPage === 'game') {
+        // 1. 強制暫停 YouTube 主音樂，絕不讓它在背景當襯底！
+        if (player && typeof player.pauseVideo === 'function') {
+            try { player.pauseVideo(); } catch(e) { console.warn("Pause YT 失敗", e); }
+        }
+
+        // 2. 播放關卡背景音樂 (由 SoundManager 負責)
+        if (window.SM && currentPoemId && typeof SM.playPoemBgm === 'function') {
+            SM.playPoemBgm(currentPoemId, audioSettings.bgm ? audioSettings.bgmVolume : 0);
+        }
+    } 
+    // ==========================================
+    // 情境 B：離開關卡返回 Home 或 Start 頁面
+    // ==========================================
+    else if (currentPage === 'home' || currentPage === 'start') {
+        
+        // 1. 讓關卡專屬音樂/音效淡出或停止
         if (window.SM) {
             if (typeof SM.stopPoemBgm === 'function') {
                 SM.stopPoemBgm(); // 停止關卡音樂
@@ -683,14 +734,15 @@ useEffect(() => {
         }
 
         // 2. 切換/恢復 YouTube 主音樂
-        const player = window.ytPlayer;
         if (player && typeof player.playVideo === 'function' && !window.ytError) {
             try {
-                player.unMute();
-                player.setVolume(SM.userBgmVolume || 100);
-                
-                // 如果 YT 影片被暫停了或被關卡音樂覆蓋，重新播放
-                player.playVideo();
+                if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
+                    player.unMute();
+                    player.setVolume(audioSettings.bgmVolume || 100);
+                    player.playVideo();
+                } else {
+                    player.pauseVideo();
+                }
             } catch (e) {
                 console.warn("恢復 YouTube 播放受阻，切換至備用音效", e);
                 window.ytError = true;
@@ -705,7 +757,7 @@ useEffect(() => {
             }
         }
     }
-}, [currentPage]);
+}, [currentPage, currentPoemId]); // 👈 監聽 currentPage 與 currentPoemId 變化
 
 	// 🌟 離開關卡回到主頁的處理函數
 const handleBackToHome = () => {
@@ -797,7 +849,7 @@ useEffect(() => {
     };
 
 useEffect(() => {
-    // 讓 SoundManager 套用全域的 BGM 與 SFX 狀態
+    // 讓 SoundManager 套用全域的 BGM 與 SFX 狀態（會同步作用於遊戲關卡背景音樂）
     if (window.SM || typeof SM !== 'undefined') {
         const soundManager = window.SM || SM;
         soundManager.applySettings(audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx, true);
@@ -806,13 +858,22 @@ useEffect(() => {
     // 控制 YouTube 的播放/暫停
     const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
     if (player && typeof player.playVideo === 'function') {
-        if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
-            player.playVideo(); 
+        // 🌟 核心修正：必須加上 currentPage !== 'game'
+        // 只有在【非遊戲關卡】且【開啟背景音樂】時，YouTube 才播放
+        if (currentPage !== 'game' && audioSettings.bgm && audioSettings.bgmVolume > 0) {
+            try {
+                player.unMute();
+                player.setVolume(audioSettings.bgmVolume);
+                player.playVideo(); 
+            } catch(e) {
+                console.warn("YouTube 播放控制失敗", e);
+            }
         } else {
+            // 在關卡內、或是靜音狀態下，YouTube 必須暫停
             player.pauseVideo(); 
         }
     }
-}, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
+}, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx, currentPage]); // 👈 依賴項記得加上 currentPage
 
 useEffect(() => {
     const preloadAllAssets = async () => {
