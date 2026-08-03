@@ -668,7 +668,57 @@ function App() {
         return () => clearTimeout(timer); // 清理定時器
     }, [homeTab, showMenu, showSettings]);
 
+// 🌟 離開關卡返回 Home 時，淡出關卡音樂並恢復 YouTube 主音樂
+useEffect(() => {
+    // 當頁面切換回到 home 時觸發
+    if (currentPage === 'home') {
+        
+        // 1. 讓關卡專屬音樂/音效淡出或停止 (根據你的 SoundManager 方法名稱)
+        if (window.SM) {
+            if (typeof SM.stopPoemBgm === 'function') {
+                SM.stopPoemBgm(); // 停止關卡音樂
+            } else if (typeof SM.fadeOutBgm === 'function') {
+                SM.fadeOutBgm();  // 或淡出音樂
+            }
+        }
 
+        // 2. 切換/恢復 YouTube 主音樂
+        const player = window.ytPlayer;
+        if (player && typeof player.playVideo === 'function' && !window.ytError) {
+            try {
+                player.unMute();
+                player.setVolume(SM.userBgmVolume || 100);
+                
+                // 如果 YT 影片被暫停了或被關卡音樂覆蓋，重新播放
+                player.playVideo();
+            } catch (e) {
+                console.warn("恢復 YouTube 播放受阻，切換至備用音效", e);
+                window.ytError = true;
+                if (window.SM && typeof SM.startAmbient === 'function') {
+                    SM.startAmbient();
+                }
+            }
+        } else {
+            // YT 失效時的後備音效
+            if (window.SM && typeof SM.startAmbient === 'function') {
+                SM.startAmbient();
+            }
+        }
+    }
+}, [currentPage]);
+
+	// 🌟 離開關卡回到主頁的處理函數
+const handleBackToHome = () => {
+    // 1. 播放點擊音效
+    if (window.SM && typeof SM.playSFX === 'function') {
+        SM.playSFX('click');
+    }
+
+    // 2. 清除關卡 ID 並切換頁面（這會自動觸發上方 useEffect 恢復 YT 音樂）
+    setCurrentPoemId(null);
+    setCurrentPage('home');
+};
+	
 // 請確保有引入 useEffect
 useEffect(() => {
     // 如果沒有打開閱讀頁，就不執行
