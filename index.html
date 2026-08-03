@@ -9,7 +9,10 @@
     <link rel="preload" as="image" href="./loading.webp">
     <link rel="preload" as="image" href="./start.webp">
     <link rel="preload" as="image" href="./startbtn.webp">
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
     <!-- 引入 Tailwind CSS 進行國風排版 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 YouTube IFrame API -->
@@ -161,9 +164,14 @@
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-/* 自定義金細捲軸 */
+/* 1. 預留捲軸空間，防止內容往左擠壓移位 */
+.custom-gold-scrollbar {
+    scrollbar-gutter: stable;
+}
+
+/* 2. 基礎軌道與寬度（4px 纖細） */
 .custom-gold-scrollbar::-webkit-scrollbar {
-    width: 4px; /* 寬度設為 4px，非常纖細 */
+    width: 4px;
 }
 
 .custom-gold-scrollbar::-webkit-scrollbar-track {
@@ -171,17 +179,35 @@
     border-radius: 4px;
 }
 
-.custom-gold-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #c9a76b 0%, #2a2415 60%); transition: all 0.3s ease; 
-    border-radius: 4px; box-shadow: 0 0 6px rgba(212, 175, 55, 0.2);
+/* 3. 🚫 徹底移除上下箭頭 (Scrollbar Buttons) */
+.custom-gold-scrollbar::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
-/* 滑鼠懸停或拖曳時：漸變光影流動 */
-::-webkit-scrollbar-thumb:hover,
-::-webkit-scrollbar-thumb:active {
-  background: linear-gradient(180deg, #2a2415 15%, #c9a76b 50%, #2a2415 85%);
-  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+/* 4. 預設狀態：靜止且滑鼠沒移入時，滑塊隱藏 (透明) */
+.custom-gold-scrollbar::-webkit-scrollbar-thumb {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 4px;
+    transition: background 0.8s ease, box-shadow 0.3s ease;
 }
+
+/* 🌟 5. 顯示滑塊的時機：[A] 滾動中 (.is-scrolling) 或 [B] 滑鼠移入內容/捲軸區域 (:hover) */
+.custom-gold-scrollbar.is-scrolling::-webkit-scrollbar-thumb,
+.custom-gold-scrollbar:hover::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #c9a76b 0%, #2a2415 60%); 
+    box-shadow: 0 0 6px rgba(212, 175, 55, 0.2);
+}
+
+/* 🌟 6. 當滑鼠「直接壓在滑塊上」或「正在拖拽」時：切換為流動光影漸層 */
+.custom-gold-scrollbar::-webkit-scrollbar-thumb:hover,
+.custom-gold-scrollbar::-webkit-scrollbar-thumb:active {
+    background: linear-gradient(180deg, #2a2415 15%, #c9a76b 50%, #2a2415 85%) !important;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.5) !important;
+}
+
 .fade-mask-list {
 transform: translateZ(0);
 -webkit-transform: translateZ(0);
@@ -253,6 +279,46 @@ transform: translateZ(0);
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
 
+const preloadAudio = (src) => {
+    return new Promise((resolve) => {
+        const audio = new Audio();
+        audio.src = src;
+        
+        // 3秒逾時機制，避免 Promise 卡死全站
+        const timer = setTimeout(() => {
+            resolve({ status: 'timeout', src });
+        }, 3000);
+
+        audio.addEventListener('canplaythrough', () => {
+            clearTimeout(timer);
+            resolve({ status: 'success', src });
+        }, { once: true });
+
+        audio.addEventListener('error', () => {
+            clearTimeout(timer);
+            resolve({ status: 'error', src });
+        }, { once: true });
+
+        audio.load();
+    });
+};
+
+// 確保 YouTube API 與 Player 準備就緒
+const checkYouTubeReady = () => {
+    return new Promise((resolve) => {
+        if (window.ytPlayer && typeof window.ytPlayer.playVideo === 'function') {
+            return resolve();
+        }
+        let checks = 0;
+        const interval = setInterval(() => {
+            checks++;
+            if ((window.ytPlayer && typeof window.ytPlayer.playVideo === 'function') || window.ytError || checks > 30) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+    });
+};
 
         window.addEventListener('DOMContentLoaded', () => {
           preloadAssets();
@@ -273,14 +339,24 @@ transform: translateZ(0);
           });
         }
 
-        function preloadFonts() {
-          if ('fonts' in document) {
-            document.fonts.load('16px "Noto Serif TC"').then(() => {
-              console.log('字體已在後台下載完畢');
-            });
-          }
+async function preloadFonts() {
+    if ('fonts' in document) {
+        try {
+            await Promise.all([
+                document.fonts.load('400 16px "Noto Serif TC"'),
+                document.fonts.load('500 16px "Noto Serif TC"'),
+                document.fonts.load('700 16px "Noto Serif TC"'),
+                document.fonts.load('900 16px "Noto Serif TC"')
+            ]);
+            console.log('字體已在後台下載完畢');
+        } catch (e) {
+            console.warn('字體預載失敗:', e);
         }
-
+        return document.fonts.ready;
+    }
+    return Promise.resolve();
+}
+            
         let ytPlayer;
 window.onYouTubeIframeAPIReady = function() {
           window.ytError = false;
@@ -550,7 +626,17 @@ function App() {
     const [homeTab, setHomeTab] = useState('game'); 
     const [readingPoem, setReadingPoem] = useState(null); 
     const [showMenu, setShowMenu] = useState(false);
-    
+    const [showSettings, setShowSettings] = useState(false);
+    const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, bgmVolume: 100, sfx: true });
+    const [confirmReset, setConfirmReset] = useState(false); 
+    const [toastMessage, setToastMessage] = useState('');
+    const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
+    const timerRef = useRef(null); 
+
+    // UI 預熱與預載狀態管理
+    const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
+    const [isPreloaded, setIsPreloaded] = useState(false);
+
     // 滾動容器的 Ref
     const scrollContainerRef = useRef(null);
     const handleScroll = () => {
@@ -570,24 +656,53 @@ function App() {
             if (el) el.classList.remove('is-scrolling');
         }, 600);
     };
-    const timerRef = useRef(null); 
-
-    // UI 預熱與預載狀態管理
-    const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
-    const [isPreloaded, setIsPreloaded] = useState(false);
 
     // 當分頁切換時，滾動到頂部
     useEffect(() => {
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = 0;
-        }
+        const timer = setTimeout(() => {
+            if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop = 0;
+            }
+        }, 0);
+
+        return () => clearTimeout(timer); // 清理定時器
     }, [homeTab, showMenu, showSettings]);
 
-    const [showSettings, setShowSettings] = useState(false);
-    const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, bgmVolume: 100, sfx: true });
-    const [confirmReset, setConfirmReset] = useState(false); 
-    const [toastMessage, setToastMessage] = useState('');
-    const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
+
+// 請確保有引入 useEffect
+useEffect(() => {
+    // 如果沒有打開閱讀頁，就不執行
+    if (!readingPoem) return;
+
+    // 1. 打開時，自動聚焦到「返回」按鈕
+    const backBtn = document.getElementById('reading-back-btn');
+    if (backBtn) backBtn.focus();
+
+    // 2. 處理全域鍵盤事件（方向鍵切換文章、ESC 退出）
+    const handleKeyDown = (e) => {
+        const currentIndex = POEMS.findIndex(p => p.id === readingPoem.id);
+        if (currentIndex === -1) return;
+
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault(); // 防止畫面跟著捲動
+            const prevIndex = currentIndex > 0 ? currentIndex - 1 : POEMS.length - 1;
+            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+            setReadingPoem(POEMS[prevIndex]);
+        } 
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextIndex = currentIndex < POEMS.length - 1 ? currentIndex + 1 : 0;
+            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+            setReadingPoem(POEMS[nextIndex]);
+        }
+        else if (e.key === 'Escape') {
+            setReadingPoem(null);
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+}, [readingPoem]); // 依賴項為 readingPoem，當它改變時重新綁定
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
@@ -649,40 +764,65 @@ useEffect(() => {
     }
 }, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
 
-    // 🌟 1. 一進入 App (Start 頁面) 即開始背景預載
-    useEffect(() => {
-        const preloadAllAssets = async () => {
-            const poemImages = POEMS
-                .filter(p => p.bgImage && p.bgImage.trim() !== "")
-                .map(p => p.bgImage);
+useEffect(() => {
+    const preloadAllAssets = async () => {
+        // 1. 收集所有圖片（包含背景圖與印章圖）
+        const poemImages = POEMS
+            .filter(p => p.bgImage && p.bgImage.trim() !== "")
+            .map(p => p.bgImage);
+        
+        const sealImages = POEMS
+            .filter(p => p.sealImgUrl && p.sealImgUrl.trim() !== "")
+            .map(p => p.sealImgUrl);
 
-            const imagesToLoad = [
-                './game.webp',
-                './loading.webp', 
-                './loading-icon.webp',
-                ...poemImages 
-            ];
+        const imagesToLoad = [
+            './start.webp',
+            './startbtn.webp',
+            './game.webp',
+            './loading.webp', 
+            './loading-icon.webp',
+            ...poemImages,
+            ...sealImages
+        ];
 
-            const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
-            const fontPromise = checkFontsReady();
-            const storagePromise = new Promise((resolve) => {
-                try {
-                    const testKey = '__shijing_test__';
-                    window.localStorage.setItem(testKey, 'ok');
-                    window.localStorage.removeItem(testKey);
-                } catch (e) { console.warn("LocalStorage 目前處於受限模式：", e); }
-                resolve();
-            });
+        // 2. 收集所有固定音效路徑
+        const audiosToLoad = [
+            'assets/audio/stamp.mp3',
+            'assets/audio/paper-turn.mp3',
+            'assets/audio/jade-click.mp3',
+            'assets/audio/ambient-wind.mp3'
+        ];
 
-            await Promise.all([imagePromise, fontPromise, storagePromise]);
-            
-            // 強制觸發排版計算 (Reflow) 並標記完成
-            setIsUIWarmedUp(true);
-            setIsPreloaded(true);
-        };
+        // 3. 併發預載所有資源
+        const imagePromise = Promise.all(imagesToLoad.map(src => preloadImage(src)));
+        const audioPromise = Promise.all(audiosToLoad.map(src => preloadAudio(src)));
+        const ytPromise = checkYouTubeReady();
+        const fontPromise = checkFontsReady();
 
-        preloadAllAssets();
-    }, []);
+        const storagePromise = new Promise((resolve) => {
+            try {
+                const testKey = '__shijing_test__';
+                window.localStorage.setItem(testKey, 'ok');
+                window.localStorage.removeItem(testKey);
+            } catch (e) { console.warn("LocalStorage 目前處於受限模式：", e); }
+            resolve();
+        });
+
+        // 等待所有資源預載完成
+        await Promise.all([imagePromise, audioPromise, ytPromise, fontPromise, storagePromise]);
+        
+        // 4. 強制觸發 DOM 重新排版計算 (Reflow)，實現真正的 UI 預熱
+        const preloadContainer = document.querySelector('.aria-hidden');
+        if (preloadContainer) {
+            void preloadContainer.offsetHeight; // 讀取 offsetHeight 強制 Reflow
+        }
+
+        setIsUIWarmedUp(true);
+        setIsPreloaded(true);
+    };
+
+    preloadAllAssets();
+}, []);
 
     // 🌟 2. 點擊開始按鈕
     const startGame = () => {
@@ -849,89 +989,127 @@ if (currentPage === 'start') {
     }
 
             if (currentPage === 'loading') {
-                return (
-                    <div className={`app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative ${isLeavingLoading ? 'animate-fade-out' : 'animate-fade-in'}`} style={{ backgroundImage: "url('./loading.webp')" }}>
-                        <div className="absolute top-1/4 flex flex-col items-center z-10">
-                            <div className="relative w-20 h-20 flex items-center justify-center mt-20">
-                                <img src="./loading-icon.webp" alt="載入中" className="w-full h-full object-contain animate-spin-slow pointer-events-none opacity-85" style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} />
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+    return (
+        <div 
+            className={`app-container bg-[length:100%_auto] bg-no-repeat bg-center flex flex-col items-center justify-center relative ${isLeavingLoading ? 'animate-fade-out' : 'animate-fade-in'}`} 
+            style={{ backgroundImage: "url('./loading.webp')" }}
+        >
+            <div className="absolute top-1/4 flex flex-col items-center z-10">
+                <div className="relative w-20 h-20 flex items-center justify-center mt-20">
+                    <img 
+                        src="./loading-icon.webp" 
+                        alt="載入中" 
+                        className="h-full object-contain animate-spin-slow pointer-events-none opacity-85" 
+                        style={{ filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }} 
+                    />
+                </div>
+            </div>
+        </div>
+    );
+}
 
             if (currentPage === 'home') {
-                const cardFonts = getCardFontClasses();
-                return (
-                    <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in">
-                        <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+    const cardFonts = getCardFontClasses();
+    return (
+        <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in">
+            {/* 背景圖 */}
+            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+            
+            {/* 頂部 Header */}
+            <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
+                <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
+                <div className="text-[10px] text-gray-500 tracking-widest uppercase">
+                    {!showMenu && !showSettings && homeTab === 'game' ? '探索篇章' : 
+                     !showMenu && !showSettings && homeTab === 'reading' ? '典藏閱讀' : 
+                     showMenu && !showSettings ? '雅士成就' : '系統設置'}
+                </div>
+            </header>
+
+            {/* 🌟 唯一掌控滾動與捲軸的外層容器 */}
+            <div 
+                ref={scrollContainerRef} 
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto px-6 py-4 relative z-10 custom-gold-scrollbar"
+            >
+                {/* 分頁一：探索篇章 */}
+                {!showMenu && !showSettings && homeTab === 'game' && (
+                    <div className="animate-fade-in">
+                        <div className="shrink-0 mb-4">
+                            <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">探索詩境之美</p>
+                            <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
+                        </div>
+                        <h3 className="shrink-0 text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
                         
-                        <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-                            <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
-                            <div className="text-[10px] text-gray-500 tracking-widest uppercase">
-                                {!showMenu && !showSettings && homeTab === 'game' ? '探索篇章' : 
-                                 !showMenu && !showSettings && homeTab === 'reading' ? '典藏閱讀' : 
-                                 showMenu && !showSettings ? '雅士成就' : '系統設置'}
-                            </div>
-                        </header>
-
-                        <div 
-                            ref={scrollContainerRef} 
-                            className="flex-1 overflow-y-auto px-6 py-4 relative z-10 custom-gold-scrollbar"
-                        >
-                            {!showMenu && !showSettings && homeTab === 'game' && (
-                                <div className="animate-fade-in overflow-hidden">
-                                    <div className="shrink-0 mb-4">
-                                        <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">探索詩境之美</p>
-                                        <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
+                        <div className="space-y-3.5 pb-10 fade-mask-list">
+                            {POEMS.map((poem, idx) => {
+                                const isUnlocked = unlockedPoems.includes(poem.id);
+                                const isCompleted = isUnlocked && poem.hotspots.length > 0;
+                                return (
+                                    <div 
+                                        key={poem.id} 
+                                        tabIndex={isUnlocked ? 0 : -1}
+                                        role="button"
+                                        aria-label={`關卡：${poem.title}，${isUnlocked ? '已解鎖' : '未解鎖'}`}
+                                        onClick={() => {
+                                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                                            openPoem(poem.id);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if ((e.key === 'Enter' || e.key === ' ') && isUnlocked) {
+                                                e.preventDefault();
+                                                if (window.SM) SM.playSFX('click');
+                                                openPoem(poem.id);
+                                            }
+                                        }}
+                                        className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}
+                                    >
+                                        <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
+                                            {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
+                                                <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                                            </div>
+                                            {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
+                                        </div>
+                                        <div className="px-2">
+                                            {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
+                                             isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
+                                             <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
+                                        </div>
                                     </div>
-                                    <h3 className="shrink-0 text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
-                                    <div className="flex-1 overflow-y-auto gold-overlay-scroll fade-mask-list space-y-3.5 pb-10" ref={scrollContainerRef} onScroll={handleScroll}>
-                                        {POEMS.map((poem, idx) => {
-                                            const isUnlocked = unlockedPoems.includes(poem.id);
-                                            const isCompleted = isUnlocked && poem.hotspots.length > 0;
-                                            return (
-                                                <div key={poem.id} onClick={() => {
-                    if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
-                    openPoem(poem.id);
-                }}
- className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}>
-                                                    <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
-                                                        {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
-                                                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
-                                                        </div>
-                                                        {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
-                                                    </div>
-                                                    <div className="px-2">
-                                                        {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
-                                                         isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
-                                                         <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+{/* 分頁二：典藏閱讀 */}
                             {!showMenu && !showSettings && homeTab === 'reading' && (
                                 <div className="animate-fade-in">
                                     <div className="shrink-0 mb-4">
                                         <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">典藏卷軸</p>
                                         <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">自由閱讀與溫習所有文學經典</p>
                                     </div>
-                                    <div className="space-y-3.5 mb-10">
+                                    <div className="space-y-3.5 mb-10 fade-mask-list">
                                         {POEMS.map((poem) => {
                                             const isExplored = unlockedPoems.includes(poem.id);
                                             return (
-                                                <div key={poem.id} onClick={() => {
+                                                <div key={poem.id} 
+tabIndex={readingPoem ? -1 : 0} 
+    role="button"
+    aria-label={`閱讀篇章`}
+onClick={() => {
 if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                     setReadingPoem(poem);
                 }}
+onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (window.SM) SM.playSFX('click');
+            setReadingPoem(poem);
+        }
+    }}
  className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90 clickable-hotspot hover:bg-[#231f18] transition-all duration-300">
                                                     <div>
                                                         <div className="flex items-center gap-2">
@@ -951,7 +1129,7 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             )}
 
                             {showMenu && !showSettings && (
-                                <div className="animate-fade-in pb-10">
+                                <div className="animate-fade-in pb-5">
                                     <div className="flex flex-col items-center justify-center mt-4 mb-8">
                                         <div className="w-16 h-16 rounded-full border border-[#c9a76b] flex items-center justify-center mb-3 bg-[#141210] shadow-[0_0_15px_rgba(201,167,107,0.15)]">
                                             <i className="fa-solid fa-award text-[#c9a76b] text-3xl"></i>
@@ -1247,7 +1425,8 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
 {readingPoem && (
                             <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
                                 <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
-                                    <button onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setReadingPoem(null);}} className="p-2 clickable-hotspot">
+                                    <button id="reading-back-btn"
+onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setReadingPoem(null);}} className="p-2 clickable-hotspot">
                                         <i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i>
                                     </button>
                                     
@@ -1256,17 +1435,20 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                                         <p className="text-[10px] text-gray-500">{readingPoem.author}</p>
                                     </div>
 
-                                    {/* 【修改】右上角新增複製按鈕 */}
+                                    {/* 右上角複製按鈕 */}
                                     <button 
-                                        onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); handleCopyPoem(readingPoem);}} 
-                                        className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center"
-                                        title="複製全文"
-                                    >
-                                        <i className="fa-regular fa-copy text-base"></i>
-                                    </button>
+    onClick={() => {
+        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
+        handleCopyPoem(readingPoem);
+    }}
+    className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#c9a76b] focus-visible:outline-none rounded"
+    title="複製全文"
+>
+    <i className="fa-regular fa-copy text-base"></i>
+</button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-6 relative scrollbar-hide">
+                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10">
                                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                                     
                                     {/* 【修改】加上 fullText select-text 允許手動劃選文字 */}
@@ -1287,10 +1469,10 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
 
                         <div className="relative z-10 w-full bg-[#0a0a09]/95 flex flex-col py-0.5 pb-1.5 border-t border-[#2d281f]/40">
                             <div className="flex justify-around items-center px-4 w-full h-12">
-                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')} iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
-                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
-                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
-                                <InkRingButton sfxType="pageTurn" label="翻頁" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
+                                <InkRingButton sfxType="pageTurn" onClick={() => setHomeTab('levels')} iconClass="fa-solid fa-compass" active={homeTab === 'game' && !showMenu && !showSettings} onClick={() => { setHomeTab('game'); setShowMenu(false); setShowSettings(false); }} label="探索" />
+                                <InkRingButton sfxType="pageTurn" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-scroll" active={homeTab === 'reading' && !showMenu && !showSettings} onClick={() => { setHomeTab('reading'); setShowMenu(false); setShowSettings(false); }} label="典藏" />
+                                <InkRingButton sfxType="pageTurn" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-award" active={showMenu && !showSettings} onClick={() => { setShowMenu(true); setShowSettings(false); }} label="成就" />
+                                <InkRingButton sfxType="pageTurn" onClick={() => setHomeTab('levels')}  iconClass="fa-solid fa-gear" active={showSettings} onClick={() => { setShowSettings(true); setConfirmReset(false); }} label="設置" />
                             </div>
                         </div>
 
@@ -1458,6 +1640,15 @@ const handleStampAction = () => {
                         return (
                             <div 
                                 key={spot.id} 
+tabIndex={0}
+    role="button"
+    aria-label={`探索點 ${index + 1}: ${spot.label}`}
+onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleHotspotClick(index, e);
+        }
+    }}
                                 className={`absolute w-12 h-12 -ml-6 -mt-6 rounded-full flex items-center justify-center clickable-hotspot transition-all duration-300 ${isCompleted ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} 
                                 style={{ left: `${spot.x}%`, top: `${spot.y}%`, zIndex: 10 }} 
                                 onClick={(e) => handleHotspotClick(index, e)}
