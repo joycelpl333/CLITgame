@@ -401,25 +401,30 @@ class SoundManager {
         this.userBgmVolume = bgmVolume;
         this.sfxMuted = !sfx;
 
-        if (isManualUpdate && this.ytFadeInterval) {
+        // 🌟 修正 1：當玩家手動調整滑竿時，立即清除 YT 淡出定時器，優先響應滑竿
+        if (this.ytFadeInterval) {
             clearInterval(this.ytFadeInterval);
             this.ytFadeInterval = null;
-        }
-
-        // 環境場景音效明確綁定 sfxMuted 開關
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.sfxMuted;
         }
 
         this.updateActualVolume();
     }
 
-    // 根據當前狀態更新實際輸出的音量，不再干擾 React 的設定 State
+    // 根據當前狀態更新實際輸出的音量
     updateActualVolume() {
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
+
+        // 🌟 修正 2：關卡背景音樂 (currentAmbience) 屬於 BGM，永遠隨時即時更新音量與靜音
+        if (this.currentAmbience) {
+            this.currentAmbience.muted = this.bgmMuted;
+            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
+            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
+        }
+
+        // 🌟 修正 3：如果 YT 淡出定時器還在運作，只暫停對 YT 的強制設定，不影響關卡音樂
         if (this.ytFadeInterval) return;
 
-        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-        // 如果在遊戲內，音量縮小至設定值的 20%
+        // 如果在遊戲內，YouTube 音量縮小至設定值的 20%
         const ytVol = this.isGameMode ? targetVol * 0.2 : targetVol;
 
         // 如果目前是播放後備風聲，套用 BGM 的音量
@@ -427,18 +432,14 @@ class SoundManager {
             this.ambientWind.volume = (ytVol / 100) * 0.7;
             this.ambientWind.muted = this.bgmMuted;
         }
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.bgmMuted;
-            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
-            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
-        }
+        
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (player && typeof player.setVolume === 'function') {
             player.setVolume(ytVol);
         }
     }
 
-    // 淡入淡出邏輯，只改變硬體播放音量，不呼叫 setState 改變搖桿位置
+    // 淡入淡出邏輯，只改變硬體播放音量
     fadeYouTubeVolume(targetRatio, duration = 1000) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (!player || typeof player.getVolume !== 'function') return;
@@ -452,7 +453,7 @@ class SoundManager {
         }
 
         let currentVolume = player.getVolume();
-        const targetVolume = this.userBgmVolume * targetRatio; // 基於玩家搖桿設定值去乘以比例
+        const targetVolume = this.userBgmVolume * targetRatio;
         const steps = 20; 
         const intervalTime = duration / steps;
         const volumeStep = (targetVolume - currentVolume) / steps;
@@ -486,7 +487,6 @@ class SoundManager {
     }
 
     startAmbient() {
-        // 唯有當 YT 載入錯誤時，才啟動風聲作為後備
         if (window.ytError) {
             const targetVol = this.bgmMuted ? 0 : (this.isGameMode ? this.userBgmVolume * 0.2 : this.userBgmVolume);
             this.ambientWind.volume = (targetVol / 100) * 0.7;
@@ -497,7 +497,6 @@ class SoundManager {
 
     enterGameMode(audioSrc) {
         this.isGameMode = true;
-        this.fadeYouTubeVolume(0.2, 1500); // 傳入 0.2 比例
         
         if (audioSrc) {
             if (this.currentAmbience) this.currentAmbience.pause();
@@ -508,11 +507,13 @@ class SoundManager {
             this.currentAmbience.volume = (targetVol / 100) * 0.9;
             this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
         }
+
+        this.fadeYouTubeVolume(0.2, 1500);
     }
 
     exitGameMode() {
         this.isGameMode = false;
-        this.fadeYouTubeVolume(1.0, 1500); // 傳回 1.0 比例
+        this.fadeYouTubeVolume(1.0, 1500);
 
         if (this.currentAmbience) {
             this.currentAmbience.pause();
@@ -521,7 +522,7 @@ class SoundManager {
     }
 }
 
-        const SM = new SoundManager();
+const SM = new SoundManager();
 
         function LoadingOverlay({ isLoading }) {
  	   if (!isLoading) return null;
