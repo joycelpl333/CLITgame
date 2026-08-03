@@ -158,7 +158,6 @@
             0% { opacity: 0; transform: scale(0.95); }
             100% { opacity: 1; transform: scale(1); }
         }
-        .animate-btn-fade-in { animation: btnFadeIn 0.8s ease-out forwards; }
 
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -173,24 +172,77 @@
 }
 
 .custom-gold-scrollbar::-webkit-scrollbar-thumb {
-    background: #c9a76b; /* 你的主色金色 */
-    border-radius: 4px; opacity:0.3;
+    background: linear-gradient(180deg, #c9a76b 0%, #2a2415 60%); transition: all 0.3s ease; 
+    border-radius: 4px; box-shadow: 0 0 6px rgba(212, 175, 55, 0.2);
 }
 
-.custom-gold-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #fff5d1; /* 滑鼠懸停時變成更亮的淡金色 */
-    opacity:0.9;
-    transition: opacity 0.3s ease-in-out;
+/* 滑鼠懸停或拖曳時：漸變光影流動 */
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #2a2415 15%, #c9a76b 50%, #2a2415 85%);
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
 }
 .fade-mask-list {
-    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 1) 85%, rgba(0, 0, 0, 0) 100%);
-    -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 15%, rgba(0, 0, 0, 1) 85%, rgba(0, 0, 0, 0) 100%);
+transform: translateZ(0);
+-webkit-transform: translateZ(0);
+-webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 95%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 95%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 .clickable-hotspot:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px #c9a76b;
 }
         .fullText { user-select: text !important; -webkit-user-select: text !important; cursor: text; }
+
+/* 淡入動畫：只控制 opacity，不影響 transform 就不會卡住 hover */
+@keyframes btnFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 國風呼吸光暈動畫（保留 drop-shadow，質感非常好） */
+@keyframes inkGlowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.5)) drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 15px rgba(161, 100, 61, 0.6)) drop-shadow(0 4px 8px rgba(0,0,0,0.6));
+  }
+}
+
+/* 整合後的組合 Class */
+.guofeng-btn-pulse {
+  /* 套用淡入與呼吸光暈 */
+  animation: 
+    btnFadeIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards, 
+    inkGlowPulse 3.5s ease-in-out 1.2s infinite;
+
+  /* 平滑的懸停縮放過渡 */
+  transition: transform 0.3s ease;
+}
+
+/* 正確的 CSS Hover 與 Active 寫法 */
+.guofeng-btn-pulse:hover {
+  transform: scale(1.05) !important; /* !important 確保優先權高於動畫 */
+}
+
+.guofeng-btn-pulse:active {
+  transform: scale(0.95) !important;
+}
     </style>
 </head>
 <body>
@@ -200,43 +252,7 @@
     
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
-	function YourComponent() {
-    const scrollRef = useRef(null);
-    const timerRef = useRef(null);
 
-    const handleScroll = () => {
-        const el = scrollRef.current;
-        if (!el) return;
-
-        // 瞬間顯示滑塊
-        if (!el.classList.contains('is-scrolling')) {
-            el.classList.add('is-scrolling');
-        }
-
-        // 重新倒數計時
-        if (timerRef.current) clearTimeout(timerRef.current);
-
-        // 停下滑動 600ms 後淡出
-        timerRef.current = setTimeout(() => {
-            if (el) el.classList.remove('is-scrolling');
-        }, 600);
-    };
-
-    return (
-        <div className="space-y-4">
-            <h2>系統設置</h2>
-            
-            {/* 直接在滾動的 div 上掛載 ref 與 onScroll */}
-            <div 
-                ref={scrollRef}
-                onScroll={handleScroll}
-                className="gold-overlay-scroll fade-mask-list max-h-[55vh] space-y-3"
-            >
-                {/* 你的內容 */}
-            </div>
-        </div>
-    );
-}
 
         window.addEventListener('DOMContentLoaded', () => {
           preloadAssets();
@@ -267,6 +283,7 @@
 
         let ytPlayer;
         function onYouTubeIframeAPIReady() {
+          window.ytError = false;
           ytPlayer = new YT.Player('yt-player', {
             height: '0', width: '0', videoId: '11pvOw2DZ58',
             playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '11pvOw2DZ58' },
@@ -274,91 +291,154 @@
               'onReady': (event) => {
                 window.ytPlayer = event.target;
                 event.target.setVolume(100);
+            },
+            'onError': (event) => {
+                console.warn("YouTube 載入失敗，將啟用風聲作為後備音源");
+                window.ytError = true;
+                if (window.SM) window.SM.startAmbient();
               }
             }
           });
         }
 
-        class SoundManager {
-          constructor() {
-            this.sfx = {
-              stamp: new Audio('assets/audio/stamp.mp3'),
-              pageTurn: new Audio('assets/audio/paper-turn.mp3'),
-              click: new Audio('assets/audio/jade-click.mp3')
-            };
-            this.ambientWind = new Audio('assets/audio/ambient-wind.mp3');
-            this.ambientWind.loop = true;
-            this.ambientWind.volume = 0.7;
-            this.currentAmbience = null;
-            // 新增一個屬性來儲存音量漸變的計時器
-            this.ytFadeInterval = null;
-          }
+class SoundManager {
+    constructor() {
+        this.sfx = {
+            stamp: new Audio('assets/audio/stamp.mp3'),
+            pageTurn: new Audio('assets/audio/paper-turn.mp3'),
+            click: new Audio('assets/audio/jade-click.mp3')
+        };
+        this.ambientWind = new Audio('assets/audio/ambient-wind.mp3');
+        this.ambientWind.loop = true;
+        this.currentAmbience = null;
+        this.ytFadeInterval = null;
+        
+        // 狀態管理
+        this.bgmMuted = false;
+        this.userBgmVolume = 100; // 獨立儲存玩家在搖桿上設定的基礎音量
+        this.sfxMuted = false;    // 預設為開啟 (false)
+        this.isGameMode = false;  // 記錄是否處於閱讀模式
+    }
 
-	// 🌟 新增這個漸變控制函數
-    fadeYouTubeVolume(targetVolume, duration = 1000) {
+    applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
+        this.bgmMuted = !bgm;
+        this.userBgmVolume = bgmVolume;
+        this.sfxMuted = !sfx;
+
+        if (isManualUpdate && this.ytFadeInterval) {
+            clearInterval(this.ytFadeInterval);
+            this.ytFadeInterval = null;
+        }
+
+        // 環境場景音效明確綁定 sfxMuted 開關
+        if (this.currentAmbience) {
+            this.currentAmbience.muted = this.sfxMuted;
+        }
+
+        this.updateActualVolume();
+    }
+
+    // 根據當前狀態更新實際輸出的音量，不再干擾 React 的設定 State
+    updateActualVolume() {
+        if (this.ytFadeInterval) return;
+
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
+        // 如果在遊戲內，音量縮小至設定值的 20%
+        const ytVol = this.isGameMode ? targetVol * 0.2 : targetVol;
+
+        // 如果目前是播放後備風聲，套用 BGM 的音量
+        if (this.ambientWind) {
+            this.ambientWind.volume = (ytVol / 100) * 0.7;
+            this.ambientWind.muted = this.bgmMuted;
+        }
+        
+        const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
+        if (player && typeof player.setVolume === 'function') {
+            player.setVolume(ytVol);
+        }
+    }
+
+    // 淡入淡出邏輯，只改變硬體播放音量，不呼叫 setState 改變搖桿位置
+    fadeYouTubeVolume(targetRatio, duration = 1000) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (!player || typeof player.getVolume !== 'function') return;
 
-        // 清除之前的漸變計時器，避免快速來回點擊造成衝突
         if (this.ytFadeInterval) clearInterval(this.ytFadeInterval);
 
+        if (this.bgmMuted) {
+            player.setVolume(0);
+            if (this.ambientWind) this.ambientWind.volume = 0;
+            return;
+        }
+
         let currentVolume = player.getVolume();
-        const steps = 20; // 將漸變分為 20 步
+        const targetVolume = this.userBgmVolume * targetRatio; // 基於玩家搖桿設定值去乘以比例
+        const steps = 20; 
         const intervalTime = duration / steps;
         const volumeStep = (targetVolume - currentVolume) / steps;
 
         this.ytFadeInterval = setInterval(() => {
             currentVolume += volumeStep;
             
-            // 檢查是否已達到或超過目標音量
             if ((volumeStep > 0 && currentVolume >= targetVolume) || 
                 (volumeStep < 0 && currentVolume <= targetVolume)) {
+                
                 player.setVolume(targetVolume);
+                if (this.ambientWind) this.ambientWind.volume = (targetVolume / 100) * 0.7;
+                
                 clearInterval(this.ytFadeInterval);
+                this.ytFadeInterval = null;
             } else {
-                player.setVolume(Math.round(currentVolume));
+                const stepVol = Math.round(currentVolume);
+                player.setVolume(stepVol);
+                if (this.ambientWind) this.ambientWind.volume = (stepVol / 100) * 0.7;
             }
         }, intervalTime);
     }
 
-          playSFX(name, volume = 1) {
-            if (this.sfx[name]) {
-              const soundClone = this.sfx[name].cloneNode();
-              soundClone.volume = volume;
-              soundClone.play().catch(e => console.log('音效播放受限:', e));
-            }
-          }
-          startAmbient() {
-            this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
-          }
-          enterGameMode(audioSrc) {
-            this.fadeYouTubeVolume(20, 1500);
-            if (typeof window.updateBgmVolumeState === 'function') {
-                window.updateBgmVolumeState(20); // 讓搖桿數值跟著變成 20
-            }
-            
-            if (audioSrc) {
-              if (this.currentAmbience) {
-                this.currentAmbience.pause();
-              }
-              this.currentAmbience = new Audio(audioSrc);
-              this.currentAmbience.loop = true;
-              this.currentAmbience.volume = 0.9; 
-              this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
-            }
-          }
-          exitGameMode() {
-            this.fadeYouTubeVolume(100, 1500);
-            if (typeof window.updateBgmVolumeState === 'function') {
-                window.updateBgmVolumeState(100); 
-            }
-
-            if (this.currentAmbience) {
-              this.currentAmbience.pause();
-              this.currentAmbience = null;
-            }
-          }
+    playSFX(name, volume = 1) {
+        if (this.sfxMuted) return; 
+        if (this.sfx[name]) {
+            const soundClone = this.sfx[name].cloneNode();
+            soundClone.volume = volume;
+            soundClone.play().catch(e => console.log('音效播放受限:', e));
         }
+    }
+
+    startAmbient() {
+        // 唯有當 YT 載入錯誤時，才啟動風聲作為後備
+        if (window.ytError) {
+            const targetVol = this.bgmMuted ? 0 : (this.isGameMode ? this.userBgmVolume * 0.2 : this.userBgmVolume);
+            this.ambientWind.volume = (targetVol / 100) * 0.7;
+            this.ambientWind.muted = this.bgmMuted;
+            this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
+        }
+    }
+
+    enterGameMode(audioSrc) {
+        this.isGameMode = true;
+        this.fadeYouTubeVolume(0.2, 1500); // 傳入 0.2 比例
+        
+        if (audioSrc) {
+            if (this.currentAmbience) this.currentAmbience.pause();
+            this.currentAmbience = new Audio(audioSrc);
+            this.currentAmbience.loop = true;
+            this.currentAmbience.muted = this.sfxMuted; // 綁定環境音效開關
+            this.currentAmbience.volume = 0.9;
+            this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
+        }
+    }
+
+    exitGameMode() {
+        this.isGameMode = false;
+        this.fadeYouTubeVolume(1.0, 1500); // 傳回 1.0 比例
+
+        if (this.currentAmbience) {
+            this.currentAmbience.pause();
+            this.currentAmbience = null;
+        }
+    }
+}
 
         const SM = new SoundManager();
 
@@ -412,6 +492,50 @@
             return Promise.resolve();
         };
 
+const RippleButton = ({ className, style, onClick, ...props }) => {
+  const [ripples, setRipples] = React.useState([]);
+
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top - size / 2;
+
+    const newRipple = { id: Date.now(), x, y, size };
+    setRipples((prev) => [...prev, newRipple]);
+
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== newRipple.id));
+    }, 600);
+
+    if (onClick) onClick(e);
+  };
+
+  return (
+    <button
+      {...props}
+      onClick={handleClick}
+      // 保留原本所有 CSS，並確保 relative 與 overflow-hidden 以容納波紋
+      className={`relative overflow-hidden ${className}`}
+      style={style}
+    >
+      {/* 渲染點擊的波紋 */}
+      {ripples.map((r) => (
+        <span
+          key={r.id}
+          className="absolute rounded-full bg-white/40 ripple-effect pointer-events-none"
+          style={{
+            top: r.y,
+            left: r.x,
+            width: r.size,
+            height: r.size,
+          }}
+        />
+      ))}
+    </button>
+  );
+};
+
 function App() {
     const [currentPage, setCurrentPage] = useState('start'); 
     const [isLeavingStart, setIsLeavingStart] = useState(false); 
@@ -424,7 +548,25 @@ function App() {
     
     // 滾動容器的 Ref
     const scrollContainerRef = useRef(null);
-    
+    const handleScroll = () => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+
+        // 瞬間顯示滑塊
+        if (!el.classList.contains('is-scrolling')) {
+            el.classList.add('is-scrolling');
+        }
+
+        // 重新倒數計時
+        if (timerRef.current) clearTimeout(timerRef.current);
+
+        // 停下滑動 600ms 後淡出
+        timerRef.current = setTimeout(() => {
+            if (el) el.classList.remove('is-scrolling');
+        }, 600);
+    };
+    const timerRef = useRef(null); 
+
     // UI 預熱與預載狀態管理
     const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
     const [isPreloaded, setIsPreloaded] = useState(false);
@@ -485,16 +627,22 @@ function App() {
     };
 
 useEffect(() => {
+    // 讓 SoundManager 套用全域的 BGM 與 SFX 狀態
+    if (window.SM || typeof SM !== 'undefined') {
+        const soundManager = window.SM || SM;
+        soundManager.applySettings(audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx, true);
+    }
+    
+    // 控制 YouTube 的播放/暫停
     const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
     if (player && typeof player.playVideo === 'function') {
         if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
-            player.playVideo(); // 開啟音樂
-            player.setVolume(audioSettings.bgmVolume); // 設定音量
+            player.playVideo(); 
         } else {
-            player.pauseVideo(); // 關閉音樂
+            player.pauseVideo(); 
         }
     }
-}, [audioSettings.bgm, audioSettings.bgmVolume]);
+}, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
 
     // 🌟 1. 一進入 App (Start 頁面) 即開始背景預載
     useEffect(() => {
@@ -534,17 +682,21 @@ useEffect(() => {
     // 🌟 2. 點擊開始按鈕
     const startGame = () => {
         const player = window.ytPlayer || ytPlayer;
-        if (player && typeof player.playVideo === 'function') {
+        if (player && typeof player.playVideo === 'function' && !window.ytError) {
             try {
                 player.unMute();
-                player.setVolume(100);
+                player.setVolume(SM.userBgmVolume); // 改為讀取基礎音量
                 player.playVideo();
             } catch(e) {
-                console.log('BGM 播放受限或異常:', e);
+                window.ytError = true;
+                SM.startAmbient();
             }
+        } else {
+            // YT 失效狀態下直接播放後備音效
+            window.ytError = true;
+            SM.startAmbient();
         }
-        
-        SM.startAmbient();
+
         SM.playSFX('click', 0.8);
 
         setIsLeavingStart(true);
@@ -631,12 +783,6 @@ useEffect(() => {
 
     const cardFonts = getCardFontClasses();
 
-useEffect(() => {
-    // 讓全域可以呼叫這個函數來同步搖桿音量
-    window.updateBgmVolumeState = (newVol) => {
-        setAudioSettings(prev => ({ ...prev, bgmVolume: newVol }));
-    };
-}, []);
     
     // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換 homeTab 時按鈕與印章變大/閃爍）
     const renderPreloadContainer = () => (
@@ -689,7 +835,7 @@ if (currentPage === 'start') {
                 >
                     <button 
                         onClick={startGame} 
-                        className="absolute bottom-[50%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center hover:scale-105 active:scale-95 transition-transform z-20 clickable-hotspot animate-btn-fade-in" 
+                        className="absolute bottom-[50%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center z-20 clickable-hotspot guofeng-btn-pulse" 
                         style={{ backgroundImage: "url('./startbtn.webp')" }} 
                     />
                 </div>
@@ -726,16 +872,16 @@ if (currentPage === 'start') {
 
                         <div 
                             ref={scrollContainerRef} 
-                            className="flex-1 overflow-y-auto px-6 py-4 relative z-10 custom-gold-scrollbar fade-mask-list"
+                            className="flex-1 overflow-y-auto px-6 py-4 relative z-10 custom-gold-scrollbar"
                         >
                             {!showMenu && !showSettings && homeTab === 'game' && (
-                                <div className="animate-fade-in">
-                                    <div className="mb-4">
-                                        <p className="text-[#c9a76b] text-base font-bold pt-5 tracking-widest">探索詩境之美</p>
+                                <div className="animate-fade-in overflow-hidden">
+                                    <div className="shrink-0 mb-4">
+                                        <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">探索詩境之美</p>
                                         <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
                                     </div>
-                                    <h3 className="text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
-                                    <div className="space-y-3.5 mb-10">
+                                    <h3 className="shrink-0 text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
+                                    <div className="flex-1 overflow-y-auto gold-overlay-scroll fade-mask-list space-y-3.5 pb-10" ref={scrollContainerRef} onScroll={handleScroll}>
                                         {POEMS.map((poem, idx) => {
                                             const isUnlocked = unlockedPoems.includes(poem.id);
                                             const isCompleted = isUnlocked && poem.hotspots.length > 0;
@@ -769,8 +915,8 @@ if (currentPage === 'start') {
 
                             {!showMenu && !showSettings && homeTab === 'reading' && (
                                 <div className="animate-fade-in">
-                                    <div className="mb-4">
-                                        <p className="text-[#c9a76b] text-base font-bold pt-5 tracking-widest">典藏卷軸</p>
+                                    <div className="shrink-0 mb-4">
+                                        <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">典藏卷軸</p>
                                         <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">自由閱讀與溫習所有文學經典</p>
                                     </div>
                                     <div className="space-y-3.5 mb-10">
@@ -994,22 +1140,24 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                                     </div>
                                 </div>
                             )}
-
+  {/* homepage設定頁*/}
                             {showSettings && (
-                                <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
-                                    <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
-                                        <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
-                                        <div className="space-y-4 mb-6 px-1">
-{/* 背景音樂開關 */}
+    <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
+        <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+            <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
+            
+            <div className="space-y-4 mb-6 px-1">
+                {/* 背景音樂（結合 YouTube 及 遊戲場景音樂） */}
                 <div className="flex justify-between items-center">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
-<input 
-    type="range" 
-    min="0" max="1" step="0.1"
-    value={audioSettings.bgmVolume}
-    onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value) })}
-    className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
-/>
+                    <input 
+                        type="range" 
+                        min="0" max="100" step="1"
+                        value={audioSettings.bgmVolume}
+                        onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
+                        className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
+                        style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
+                    />
                     <button 
                         className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
                         onClick={() => {
@@ -1017,17 +1165,27 @@ if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             setAudioSettings({...audioSettings, bgm: !audioSettings.bgm});
                         }}
                     >
-                	<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-{/* 環境音效開關 */}
-                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
-<button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
-onClick={() => {
+                        <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
+                    </button>
+                </div>
+
+                {/* 環境音效（僅有一鍵靜音按鈕） */}
+                <div className="flex justify-between items-center">
+                    <span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
+                    <div className="w-[45%]"></div> {/* 佈局佔位 */}
+                    <button 
+                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
+                        onClick={() => {
                             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             setAudioSettings({...audioSettings, sfx: !audioSettings.sfx});
-                        }}>
-<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-                                        </div>
-                                        {/* 字體大小選擇 */}
+                        }}
+                    >
+                        <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
+                    </button>
+                </div>
+            </div>
+
+            {/* 字體大小選擇 */}
             <div className="pt-2">
                 <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span>
@@ -1048,7 +1206,8 @@ onClick={() => {
                     ))}
                 </div>
             </div>
-{/* 重置與關閉按鈕 */}
+
+            {/* 重置與關閉按鈕 */}
             <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
                 {!confirmReset ? (
                     <button 
@@ -1061,22 +1220,23 @@ onClick={() => {
                         重置遊戲進度
                     </button>
                 ) : (
-                                                <div className="flex gap-2">
-                                                    <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold clickable-hotspot" onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
-                                                    <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300 clickable-hotspot" onClick={() => {
-                                if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
-                                setConfirmReset(false);
-                            }}>取消</button>
-                                                </div>
-                                            )}
-                                            <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" 
-onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
-                        setShowSettings(false);
-                    }}>關閉</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                    <div className="flex gap-2">
+                        <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold clickable-hotspot" onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
+                        <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300 clickable-hotspot" onClick={() => {
+                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+                            setConfirmReset(false);
+                        }}>取消</button>
+                    </div>
+                )}
+                <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" 
+                    onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setShowSettings(false);}}
+                >
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+)}
                         </div>
 
 {readingPoem && (
@@ -1178,7 +1338,6 @@ return (
             const [showGameSettings, setShowGameSettings] = useState(false);
             const [showSubtitle, setShowSubtitle] = useState(true); 
             const [showHotspotHints, setShowHotspotHints] = useState(false); 
-            const [soundEnabled, setSoundEnabled] = useState(!isMuted);
             const [showInterpretation, setShowInterpretation] = useState(false);
             const [isEntryGlowing, setIsEntryGlowing] = useState(true);
             // 判斷是否背景音樂與環境音效都關閉了
@@ -1509,22 +1668,24 @@ const handleStampAction = () => {
                         </div>
                     )}
 
-{/* 設定彈窗 Overlay */}
+{/* 設定彈窗 Overlay (GamePlayArea 專用) */}
 {showGameSettings && (
-                                <div className="settings-overlay fixed inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
-                                    <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
-                                        <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
-                                        <div className="space-y-4 mb-6 px-1">
-{/* 背景音樂開關 */}
+    <div className="settings-overlay absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
+        <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+            <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
+            
+            <div className="space-y-4 mb-6 px-1">
+                {/* 背景音樂開關 */}
                 <div className="flex justify-between items-center">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
-<input 
-    type="range" 
-    min="0" max="1" step="0.1"
-    value={audioSettings.bgmVolume}
-    onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value) })}
-    className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
-/>
+                    <input 
+                        type="range" 
+                        min="0" max="100" step="1"
+                        value={audioSettings.bgmVolume}
+                        onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
+                        className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
+                        style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
+                    />
                     <button 
                         className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
                         onClick={() => {
@@ -1532,23 +1693,33 @@ const handleStampAction = () => {
                             setAudioSettings({...audioSettings, bgm: !audioSettings.bgm});
                         }}
                     >
-                	<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-{/* 環境音效開關 */}
-                                            <div className="flex justify-between items-center"><span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
-<button className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
-onClick={() => {
+                        <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.bgm ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
+                    </button>
+                </div>
+
+                {/* 環境音效開關 */}
+                <div className="flex justify-between items-center">
+                    <span className="text-[#e0d5ba] tracking-widest text-xs">環境音效</span>
+                    <div className="w-[45%]"></div> {/* 佔位對齊 */}
+                    <button 
+                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.sfx ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
+                        onClick={() => {
                             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             setAudioSettings({...audioSettings, sfx: !audioSettings.sfx});
-                        }}>
-<div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div></button></div>
-                                        </div>
-                                        {/* 字體大小選擇 */}
+                        }}
+                    >
+                        <div className={`w-3.5 h-3.5 bg-[#11100e] rounded-full absolute top-0.5 transition-transform duration-300 ${audioSettings.sfx ? 'translate-x-6' : 'translate-x-0.5'}`}></div>
+                    </button>
+                </div>
+            </div>
+
+            {/* 字體大小選擇 */}
             <div className="pt-2">
                 <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span>
                     <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span>
                 </div>
-                <div className="flex gap-2.5 mb-3">
+                <div className="flex gap-2.5">
                     {['sm', 'md', 'lg'].map(sz => (
                         <button 
                             key={sz} 
@@ -1564,71 +1735,71 @@ onClick={() => {
                 </div>
             </div>
 
-{/* 關閉按鈕 */}
-            <button className="ink-button"
-                onClick={() => setShowGameSettings(false)}
-                style={{
-                    width: '100%',
-                    padding: '8px', 
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                }}
-            >
-                關閉</button>
-                                        </div>
-                                    </div>
+            {/* 關閉按鈕 */}
+            <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
+                <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" 
+                    onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setShowGameSettings(false);}}
+                >
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+)}
+</div> 
+    );
+}
 
-                            )}
-                </div>
-            );
-        }
 
-        function InkRingButton({ iconClass, onClick, active, label, isGlowing = false }) {
-// 🌟 包裝點擊事件，先播放音效再執行原本的 onClick
+function InkRingButton({ iconClass, onClick, active, label, isGlowing = false, sfxType = 'click' }) { // 👈 補上 sfxType 的預設值
+    
+    // 🌟 包裝點擊事件，先播放音效再執行原本的 onClick
     const handleClick = (e) => {
         if (window.SM || typeof SM !== 'undefined') {
             SM.playSFX(sfxType);
         }
         if (onClick) onClick(e);
     };
-            return (
-                <button 
-                    onClick={onClick} 
-                    className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"
-                >
-                    <div className={`relative w-6 h-6 flex items-center justify-center transition-all duration-300 active:scale-90 ${
-                        active ? 'scale-105' : 'scale-100'
-                    }`}>
-                        <div className={`absolute inset-0 rotate-45 border transition-all duration-500 rounded-[3px] ${
-                            active 
-                                ? 'border-[#c9a76b] bg-[#c9a76b]/15 shadow-[0_0_10px_rgba(201,167,107,0.4)]' 
-                                : 'border-[#2d281f] bg-[#12110e]/80 group-hover:border-gray-500'
-                        }`} />
 
-                        {active && (
-                            <div className="absolute inset-0 rotate-45 border border-[#c9a76b]/40 rounded-[3px] scale-125 pointer-events-none" />
-                        )}
+    return (
+        <button 
+            onClick={handleClick}  // 👈 這裡必須改成 handleClick，音效才會生效
+            className="flex flex-col items-center justify-center group focus:outline-none clickable-hotspot p-1 -m-1"
+        >
+            <div className={`relative w-6 h-6 flex items-center justify-center transition-all duration-300 active:scale-90 ${
+                active ? 'scale-105' : 'scale-100'
+            }`}>
+                <div className={`absolute inset-0 rotate-45 border transition-all duration-500 rounded-[3px] ${
+                    active 
+                        ? 'border-[#c9a76b] bg-[#c9a76b]/15 shadow-[0_0_10px_rgba(201,167,107,0.4)]' 
+                        : 'border-[#2d281f] bg-[#12110e]/80 group-hover:border-gray-500'
+                }`} />
 
-                        <div className="z-10">
-                            <i className={`${iconClass} text-xs pb-2 ${active ? 'text-[#c9a76b]' : 'text-gray-400'}`}></i>
-                        </div>
-                    </div>
+                {active && (
+                    <div className="absolute inset-0 rotate-45 border border-[#c9a76b]/40 rounded-[3px] scale-125 pointer-events-none" />
+                )}
 
-                    <span className={`text-[9px] mt-1 tracking-wider transition-all ${
-                        isGlowing 
-                            ? 'text-[#fff5d1] font-bold drop-shadow-[0_0_8px_rgba(201,167,107,1)] animate-pulse' 
-                            : active ? 'text-[#c9a76b]' : 'text-gray-400'
-                    }`}>
-                        {label}
-                    </span>
-                </button>
-            );
-        }
+                <div className="z-10">
+                    <i className={`${iconClass} text-xs pb-2 ${active ? 'text-[#c9a76b]' : 'text-gray-400'}`}></i>
+                </div>
+            </div>
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(
-            <App />
-        );
-    </script>
+            <span className={`text-[9px] mt-1 tracking-wider transition-all ${
+                isGlowing 
+                    ? 'text-[#fff5d1] font-bold drop-shadow-[0_0_8px_rgba(201,167,107,1)] animate-pulse' 
+                    : active ? 'text-[#c9a76b]' : 'text-gray-400'
+            }`}>
+                {label}
+            </span>
+        </button>
+    );
+}
+
+// 最後是 React 的渲染掛載
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+    <App />
+);
+</script>
 </body>
 </html>
