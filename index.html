@@ -362,40 +362,99 @@ async function preloadFonts() {
 }
             
 let ytPlayer;
-        window.onYouTubeIframeAPIReady = function() {
-    console.log("[Audio Debug] 🎵 YouTube API 腳本載入完成");
+// 全局 YouTube 播放器動態初始化 / 重新建立函數
+window.initOrResetYTPlayer = function(callback) {
+    console.log("[Audio Debug] 🔄 正在嘗試初始化 / 重置 YouTube 播放器...");
+
+    // 1. 如果已有損毀或舊的實例，強制銷毀
+    if (window.ytPlayer && typeof window.ytPlayer.destroy === 'function') {
+        try {
+            window.ytPlayer.destroy();
+            console.log("[Audio Debug] 🗑️ 舊的 YouTube 播放器實例已銷毀");
+        } catch (e) {
+            console.warn("[Audio Debug] 銷毀舊實例時出錯:", e);
+        }
+    }
+
+    // 2. 確保 DOM 容器存在，如果被 React 移除則自動重新創建
+    let ytContainer = document.getElementById('yt-player');
+    if (!ytContainer) {
+        ytContainer = document.createElement('div');
+        ytContainer.id = 'yt-player';
+        ytContainer.style.display = 'none';
+        document.body.appendChild(ytContainer);
+    }
+
     window.ytError = false;
     window.ytPlayerReady = false;
 
-    ytPlayer = new YT.Player('yt-player', {
-        height: '0', width: '0', videoId: '11pvOw2DZ58',
-        playerVars: { 'autoplay': 1, 'loop': 1, 'playlist': '11pvOw2DZ58', 'controls': 0 },
-        events: {
-            'onReady': (event) => {
-                console.log("[Audio Debug] 🎵 YouTube 播放器 Ready! 嘗試靜音偷跑...");
-                window.ytPlayerReady = true;
-                // 核心解法：先靜音才能繞過瀏覽器自動播放限制，讓它先在背景跑起來
-                event.target.mute();
-                event.target.playVideo(); 
-                
-                // 延遲同步一次狀態，確保 SoundManager 知道它已經準備好了
-                setTimeout(() => {
-                    if (window.SM) window.SM.updateActualVolume();
-                }, 500);
-            },
-            'onStateChange': (event) => {
-                const stateNames = { "-1": "未開始", "0": "結束", "1": "播放中", "2": "暫停", "3": "緩衝中", "5": "已就緒" };
-                console.log(`[Audio Debug] 🎵 YouTube 狀態改變: ${event.data} (${stateNames[event.data]})`);
-            },
-            'onError': (event) => {
-                console.warn("[Audio Debug] ❌ YouTube 載入/播放失敗，錯誤碼:", event.data);
-                window.ytError = true;
-                if (window.SM) window.SM.updateActualVolume();
-            }
+    // 創建 YT 實例的核心邏輯
+    const createYTInstance = () => {
+        try {
+            window.ytPlayer = new YT.Player('yt-player', {
+                height: '0',
+                width: '0',
+                videoId: '11pvOw2DZ58',
+                playerVars: {
+                    'autoplay': 0, // 💡 刷新頁面時絕不預設 autoplay，避免被瀏覽器直接封鎖死
+                    'loop': 1,
+                    'playlist': '11pvOw2DZ58',
+                    'controls': 0,
+                    'enablejsapi': 1,
+                    'origin': window.location.origin
+                },
+                events: {
+                    'onReady': (event) => {
+                        console.log("[Audio Debug] 🎵 YouTube 播放器已成功建立 (Ready)");
+                        window.ytPlayerReady = true;
+                        if (window.SM) {
+                            window.SM.updateActualVolume();
+                        }
+                        if (callback) callback(true);
+                    },
+                    'onStateChange': (event) => {
+                        const stateNames = { "-1": "未開始", "0": "結束", "1": "播放中", "2": "暫停", "3": "緩衝中", "5": "已就緒" };
+                        console.log(`[Audio Debug] 🎵 YT 狀態變更: ${event.data} (${stateNames[event.data] || '未知'})`);
+                    },
+                    'onError': (event) => {
+                        console.warn("[Audio Debug] ❌ YouTube 載入/播放失敗 (錯誤碼:", event.data, ")");
+                        window.ytError = true;
+                        if (window.SM) window.SM.updateActualVolume();
+                        if (callback) callback(false);
+                    }
+                }
+            });
+        } catch (err) {
+            console.error("[Audio Debug] ❌ 創建 YT Player 實例失敗:", err);
+            window.ytError = true;
+            if (window.SM) window.SM.updateActualVolume();
+            if (callback) callback(false);
         }
-    });
-}
+    };
 
+    // 3. 處理快取問題：若 API 已經在 Window 上，直接建立；否則等待 API Ready
+    if (window.YT && window.YT.Player) {
+        createYTInstance();
+    } else {
+        window.onYouTubeIframeAPIReady = createYTInstance;
+        
+        // 若 API 腳本尚未載入，動態插入腳本
+        if (!document.getElementById('yt-iframe-api-script')) {
+            const tag = document.createElement('script');
+            tag.id = 'yt-iframe-api-script';
+            tag.src = "https://www.youtube.com/iframe_api";
+            const firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        }
+    }
+};
+
+// 頁面首次載入時執行一次
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    window.initOrResetYTPlayer();
+} else {
+    window.addEventListener('DOMContentLoaded', () => window.initOrResetYTPlayer());
+}
 class SoundManager {
     constructor() {
         this.sfx = {
@@ -456,32 +515,40 @@ updateActualVolume() {
             
             if (player && window.ytPlayerReady && !window.ytError) {
                 try {
-                    const ytState = player.getPlayerState ? player.getPlayerState() : -1;
+                    const ytState = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
                     
-                    // 確保解除靜音偷跑狀態
                     if (typeof player.isMuted === 'function' && player.isMuted()) {
-                        console.log("[Audio Debug] 🎵 解除 YouTube 靜音狀態");
                         player.unMute();
                     }
 
                     player.setVolume(targetVol);
 
                     if (targetVol > 0) {
-                        // 如果目標要有聲音，但 YT 卻不在播放狀態 (1)，強制喚醒
+                        // 如果狀態是 -1 (未開始) 或 2 (暫停)，嘗試播放
                         if (ytState !== 1) {
-                            console.log(`[Audio Debug] 🎵 強制喚醒 YouTube (當前狀態: ${ytState})`);
+                            console.log(`[Audio Debug] 🎵 嘗試播放 YouTube (當前狀態: ${ytState})`);
                             player.playVideo();
                         }
                     } else {
-                        // 如果目標是靜音，為了省資源把它暫停
                         if (ytState === 1) player.pauseVideo();
                     }
                     if (this.ambientWind) this.ambientWind.pause(); 
                 } catch (e) {
-                    console.error("[Audio Debug] ❌ 控制 YouTube 時發生錯誤", e);
+                    console.error("[Audio Debug] ❌ 控制 YouTube 時發生異常，觸發動態修復...", e);
+                    window.ytError = true;
+                    // 當 YT 播放發生例外，自動嘗試重置 YouTube 播放器 DOM
+                    if (typeof window.initOrResetYTPlayer === 'function') {
+                        window.initOrResetYTPlayer();
+                    }
                 }
             } else {
-                // YT 錯誤或還沒準備好，使用風聲
+                // 如果 YT 處於錯誤或未就緒狀態
+                if (targetVol > 0 && !window.ytPlayerReady && typeof window.initOrResetYTPlayer === 'function') {
+                    console.log("[Audio Debug] ⚠️ YT 未就緒，嘗試重新初始化 YT...");
+                    window.initOrResetYTPlayer();
+                }
+
+                // 備用風聲
                 if (this.ambientWind) {
                     this.ambientWind.volume = (targetVol / 100) * 0.7;
                     if (targetVol > 0) this.ambientWind.play().catch(()=>{});
@@ -489,12 +556,11 @@ updateActualVolume() {
                 }
             }
         } else {
-            // 【 Game Page 狀態 】(保留你原本的邏輯，加入 YT 暫停確保)
+            // 【 Game Page 狀態 】
             if (player && typeof player.setVolume === 'function') {
                 player.setVolume(0);
                 if (typeof player.pauseVideo === 'function') player.pauseVideo();
             }
-            // ... (底下保留你原本關卡風聲與 currentAmbience 的邏輯) ...
             if (this.currentAmbience) {
                 this.currentAmbience.volume = (targetVol / 100) * 0.9;
                 if (targetVol > 0) this.currentAmbience.play().catch(()=>{});
@@ -506,8 +572,7 @@ updateActualVolume() {
                 else this.ambientWind.pause();
             }
         }
-    }
-  
+    }  
 
     fadeYouTubeVolume(targetRatio, duration = 1500) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
@@ -790,55 +855,62 @@ const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
     const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
     const [isPreloaded, setIsPreloaded] = useState(false);
 
-// 全局音訊解鎖器：監聽使用者的「第一次」實體互動
-    useEffect(() => {
-        const handleGlobalInteraction = () => {
-            if (isAudioUnlocked) return;
-            
-            console.log("[Audio Debug] 🔓 偵測到使用者首次互動，解鎖全局音訊！");
-            setIsAudioUnlocked(true);
+useEffect(() => {
+    const handleGlobalInteraction = () => {
+        console.log("[Audio Debug] 🔓 偵測到使用者實體點擊，進行全域音訊檢查與解鎖...");
 
-            // 1. 喚醒 HTML5 Audio
-            const soundManager = window.SM || (typeof SM !== 'undefined' ? SM : null);
-            if (soundManager) {
-                if (soundManager.ambientWind) {
-                    soundManager.ambientWind.play().then(() => {
-                        // 如果當前設定是靜音，解鎖後立刻暫停
-                        if (soundManager.bgmMuted || soundManager.userBgmVolume === 0) {
-                            soundManager.ambientWind.pause();
-                        }
-                    }).catch(e => console.warn("[Audio Debug] HTML5解鎖失敗", e));
+        const soundManager = window.SM || (typeof SM !== 'undefined' ? SM : null);
+        const player = window.ytPlayer;
+
+        // 1. 解鎖 HTML5 Audio 權限
+        if (soundManager && soundManager.ambientWind) {
+            soundManager.ambientWind.play().then(() => {
+                if (soundManager.bgmMuted || soundManager.userBgmVolume === 0 || soundManager.isGameMode) {
+                    soundManager.ambientWind.pause();
                 }
-                
-                // 2. 喚醒並觸發 YouTube 正式播放
-                const player = window.ytPlayer;
-                if (player && window.ytPlayerReady) {
-                    try {
-                        player.unMute(); // 解除初始的偷跑靜音
-                        soundManager.updateActualVolume(); // 重新計算並套用真實音量
-                    } catch (e) {
-                        console.error("[Audio Debug] ❌ 解鎖 YouTube 失敗", e);
+            }).catch(() => {});
+        }
+
+        // 2. 檢查 YouTube 播放器狀況
+        if (player && window.ytPlayerReady && !window.ytError) {
+            try {
+                const currentState = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
+                player.unMute();
+
+                // 如果點擊後 YT 依然卡在 -1 (未開始)，說明被瀏覽器刷新政策封鎖了，執行現場重建！
+                if (currentState === -1 || currentState === 5) {
+                    console.log("[Audio Debug] ⚠️ 偵測到 YouTube 因頁面刷新被封鎖，執行【現場無痛重建】...");
+                    if (typeof window.initOrResetYTPlayer === 'function') {
+                        window.initOrResetYTPlayer((success) => {
+                            if (success && window.SM) window.SM.updateActualVolume();
+                        });
                     }
+                } else {
+                    if (soundManager) soundManager.updateActualVolume();
+                }
+            } catch (e) {
+                console.warn("[Audio Debug] 檢查 YT 失敗，觸發重建:", e);
+                if (typeof window.initOrResetYTPlayer === 'function') {
+                    window.initOrResetYTPlayer();
                 }
             }
+        } else {
+            // 如果當前根本沒有 YT 實例，嘗試建立
+            if (typeof window.initOrResetYTPlayer === 'function') {
+                window.initOrResetYTPlayer();
+            }
+        }
+    };
 
-            // 解鎖成功後，移除監聽器避免浪費效能
-            window.removeEventListener('click', handleGlobalInteraction);
-            window.removeEventListener('touchstart', handleGlobalInteraction);
-            window.removeEventListener('keydown', handleGlobalInteraction);
-        };
+    // 監聽點擊與觸控
+    window.addEventListener('click', handleGlobalInteraction);
+    window.addEventListener('touchstart', handleGlobalInteraction, { passive: true });
 
-        // 綁定各種常見的互動事件
-        window.addEventListener('click', handleGlobalInteraction);
-        window.addEventListener('touchstart', handleGlobalInteraction, { passive: true });
-        window.addEventListener('keydown', handleGlobalInteraction);
-
-        return () => {
-            window.removeEventListener('click', handleGlobalInteraction);
-            window.removeEventListener('touchstart', handleGlobalInteraction);
-            window.removeEventListener('keydown', handleGlobalInteraction);
-        };
-    }, [isAudioUnlocked]);
+    return () => {
+        window.removeEventListener('click', handleGlobalInteraction);
+        window.removeEventListener('touchstart', handleGlobalInteraction);
+    };
+}, []);
 
     // 滾動容器的 Ref
     const scrollContainerRef = useRef(null);
