@@ -209,6 +209,8 @@
 }
 
 .fade-mask-list {
+transform: translateZ(0);
+-webkit-transform: translateZ(0);
 -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 background-color: transparent;
@@ -1110,9 +1112,9 @@ if (currentPage === 'start') {
             if (currentPage === 'home') {
     const cardFonts = getCardFontClasses();
     return (
-        <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in">
+        <div className="app-container h-dvh w-full overflow-hidden flex flex-col justify-between animate-fade-in" style={{ backgroundColor: 'var(--bg-dark)' }}>
             {/* 背景圖 */}
-            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+            <div className="absolute inset-0 opacity-30 contrast-125 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'opacity'}}></div>
             
             {/* 頂部 Header */}
             <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
@@ -1137,7 +1139,7 @@ if (currentPage === 'start') {
                             <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">探索詩境之美</p>
                             <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
                         </div>
-                        <h3 className="shrink-0 text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
+                        <h3 className="shrink-0 text-xs text-gray-400 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
                         
                         <div className="space-y-3.5 pb-10 fade-mask-list">
                             {POEMS.map((poem, idx) => {
