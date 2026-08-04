@@ -391,9 +391,9 @@ class SoundManager {
         
         // 狀態管理
         this.bgmMuted = false;
-        this.userBgmVolume = 100; // 獨立儲存玩家在搖桿上設定的基礎音量
-        this.sfxMuted = false;    // 預設為開啟 (false)
-        this.isGameMode = false;  // 記錄是否處於閱讀模式
+        this.userBgmVolume = 100; 
+        this.sfxMuted = false;    
+        this.isGameMode = false;  
     }
 
     applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
@@ -406,56 +406,83 @@ class SoundManager {
             this.ytFadeInterval = null;
         }
 
-        // 環境場景音效明確綁定 sfxMuted 開關
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.sfxMuted;
-        }
-
+        // 環境場景音效明確綁定 sfxMuted 開關 (this.sfx的控制獨立於背景音樂)
         this.updateActualVolume();
     }
 
-    // 根據當前狀態更新實際輸出的音量，不再干擾 React 的設定 State
+    // 動態根據當前狀態 (Home/Game) 分配音量與播放狀態
     updateActualVolume() {
         if (this.ytFadeInterval) return;
 
         const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-        // 如果在遊戲內，音量縮小至設定值的 20%
-        const ytVol = this.isGameMode ? targetVol * 0.2 : targetVol;
-
-        // 如果目前是播放後備風聲，套用 BGM 的音量
-        if (this.ambientWind) {
-            this.ambientWind.volume = (ytVol / 100) * 0.7;
-            this.ambientWind.muted = this.bgmMuted;
-        }
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.bgmMuted;
-            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
-            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
-        }
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
-        if (player && typeof player.setVolume === 'function') {
-            player.setVolume(ytVol);
+
+        if (!this.isGameMode) {
+            // 【 Home Page 狀態 】： YT 音樂為主，若出錯則用 Wind 替代。停止關卡音樂。
+            if (this.currentAmbience) this.currentAmbience.pause();
+            
+            if (player && typeof player.setVolume === 'function' && !window.ytError) {
+                player.setVolume(targetVol);
+                if (targetVol > 0 && typeof player.playVideo === 'function') player.playVideo();
+                else if (targetVol === 0 && typeof player.pauseVideo === 'function') player.pauseVideo();
+                if (this.ambientWind) this.ambientWind.pause(); // YT 正常則關閉備用風聲
+            } else {
+                // YT 錯誤 -> 啟用備用風聲
+                if (this.ambientWind) {
+                    this.ambientWind.volume = (targetVol / 100) * 0.7;
+                    this.ambientWind.muted = this.bgmMuted;
+                    if (targetVol > 0) this.ambientWind.play().catch(()=>{});
+                    else this.ambientWind.pause();
+                }
+            }
+        } else {
+            // 【 Game Page 狀態 】： 關卡音樂為主。完全靜音並暫停 YT 音樂。
+            if (player && typeof player.setVolume === 'function') {
+                player.setVolume(0);
+                if (typeof player.pauseVideo === 'function') player.pauseVideo();
+            }
+            
+            if (this.currentAmbience) {
+                this.currentAmbience.muted = this.bgmMuted;
+                this.currentAmbience.volume = (targetVol / 100) * 0.9;
+                if (targetVol > 0) this.currentAmbience.play().catch(()=>{});
+                else this.currentAmbience.pause();
+                if (this.ambientWind) this.ambientWind.pause(); // 有關卡音樂就不用備用風聲
+            } else {
+                // 若本關沒有關卡音樂 -> 啟用備用風聲
+                if (this.ambientWind) {
+                    this.ambientWind.muted = this.bgmMuted;
+                    this.ambientWind.volume = (targetVol / 100) * 0.7;
+                    if (targetVol > 0) this.ambientWind.play().catch(()=>{});
+                    else this.ambientWind.pause();
+                }
+            }
         }
     }
 
-    // 淡入淡出邏輯，只改變硬體播放音量，不呼叫 setState 改變搖桿位置
-    fadeYouTubeVolume(targetRatio, duration = 1000) {
+    // 控制 YouTube 的淡出與淡入
+    fadeYouTubeVolume(targetRatio, duration = 1500) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (!player || typeof player.getVolume !== 'function') return;
 
         if (this.ytFadeInterval) clearInterval(this.ytFadeInterval);
 
-        if (this.bgmMuted) {
+        if (this.bgmMuted || this.userBgmVolume === 0) {
             player.setVolume(0);
-            if (this.ambientWind) this.ambientWind.volume = 0;
+            if (typeof player.pauseVideo === 'function') player.pauseVideo();
             return;
         }
 
         let currentVolume = player.getVolume();
-        const targetVolume = this.userBgmVolume * targetRatio; // 基於玩家搖桿設定值去乘以比例
+        const targetVolume = this.userBgmVolume * targetRatio; 
         const steps = 20; 
         const intervalTime = duration / steps;
         const volumeStep = (targetVolume - currentVolume) / steps;
+
+        // 若是淡入且為暫停狀態，先啟動播放
+        if (targetRatio > 0 && typeof player.playVideo === 'function') {
+            player.playVideo(); 
+        }
 
         this.ytFadeInterval = setInterval(() => {
             currentVolume += volumeStep;
@@ -464,14 +491,39 @@ class SoundManager {
                 (volumeStep < 0 && currentVolume <= targetVolume)) {
                 
                 player.setVolume(targetVolume);
-                if (this.ambientWind) this.ambientWind.volume = (targetVolume / 100) * 0.7;
-                
+                // 如果是完全淡出，就暫停播放節省資源
+                if (targetRatio === 0 && typeof player.pauseVideo === 'function') {
+                    player.pauseVideo();
+                }
                 clearInterval(this.ytFadeInterval);
                 this.ytFadeInterval = null;
             } else {
-                const stepVol = Math.round(currentVolume);
-                player.setVolume(stepVol);
-                if (this.ambientWind) this.ambientWind.volume = (stepVol / 100) * 0.7;
+                player.setVolume(Math.round(currentVolume));
+            }
+        }, intervalTime);
+    }
+
+    // 泛用的 HTML5 Audio 淡出與淡入 (用於關卡音效 / Wind)
+    fadeAudio(audioElement, targetVol, duration = 1500, callback) {
+        if (!audioElement) return;
+        if (audioElement.fadeInterval) clearInterval(audioElement.fadeInterval);
+        
+        const steps = 20;
+        const intervalTime = duration / steps;
+        let currentVol = audioElement.volume || 0;
+        const volumeStep = (targetVol - currentVol) / steps;
+        
+        if (targetVol > 0) audioElement.play().catch(()=>{});
+
+        audioElement.fadeInterval = setInterval(() => {
+            currentVol += volumeStep;
+            if ((volumeStep > 0 && currentVol >= targetVol) || (volumeStep < 0 && currentVol <= targetVol)) {
+                audioElement.volume = Math.max(0, Math.min(1, targetVol));
+                clearInterval(audioElement.fadeInterval);
+                audioElement.fadeInterval = null;
+                if (callback) callback();
+            } else {
+                audioElement.volume = Math.max(0, Math.min(1, currentVol));
             }
         }, intervalTime);
     }
@@ -486,37 +538,73 @@ class SoundManager {
     }
 
     startAmbient() {
-        // 唯有當 YT 載入錯誤時，才啟動風聲作為後備
-        if (window.ytError) {
-            const targetVol = this.bgmMuted ? 0 : (this.isGameMode ? this.userBgmVolume * 0.2 : this.userBgmVolume);
+        if (window.ytError && !this.isGameMode) {
+            const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
             this.ambientWind.volume = (targetVol / 100) * 0.7;
             this.ambientWind.muted = this.bgmMuted;
-            this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
+            if (targetVol > 0) this.ambientWind.play().catch(()=>{});
         }
     }
 
     enterGameMode(audioSrc) {
         this.isGameMode = true;
-        this.fadeYouTubeVolume(0.2, 1500); // 傳入 0.2 比例
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
         
+        // 1. YouTube 完全淡出
+        this.fadeYouTubeVolume(0, 1500); 
+
+        // 2. 如果正在播放 Home 頁面的備用風聲，將其淡出停止
+        if (this.ambientWind && window.ytError) {
+             this.fadeAudio(this.ambientWind, 0, 1000, () => this.ambientWind.pause());
+        }
+
+        // 3. 淡入關卡背景音樂
         if (audioSrc) {
-            if (this.currentAmbience) this.currentAmbience.pause();
-            this.currentAmbience = new Audio(audioSrc);
+            if (this.currentAmbience) {
+                this.currentAmbience.pause();
+                this.currentAmbience.src = audioSrc;
+            } else {
+                this.currentAmbience = new Audio(audioSrc);
+            }
             this.currentAmbience.loop = true;
             this.currentAmbience.muted = this.bgmMuted;
-            const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-            this.currentAmbience.volume = (targetVol / 100) * 0.9;
-            this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
+            this.currentAmbience.volume = 0; 
+            this.fadeAudio(this.currentAmbience, (targetVol / 100) * 0.9, 1500);
+        } else {
+            // 如果這關沒有配置音效，就選用 ambientWind 作為備用關卡 BGM
+            this.currentAmbience = null;
+            if (this.ambientWind) {
+                this.ambientWind.muted = this.bgmMuted;
+                this.ambientWind.volume = 0;
+                this.fadeAudio(this.ambientWind, (targetVol / 100) * 0.7, 1500);
+            }
         }
     }
 
     exitGameMode() {
         this.isGameMode = false;
-        this.fadeYouTubeVolume(1.0, 1500); // 傳回 1.0 比例
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
 
+        // 1. 淡出關卡背景音樂
         if (this.currentAmbience) {
-            this.currentAmbience.pause();
-            this.currentAmbience = null;
+            this.fadeAudio(this.currentAmbience, 0, 1000, () => {
+                if (this.currentAmbience) this.currentAmbience.pause();
+                this.currentAmbience = null;
+            });
+        }
+        
+        // 2. 重新連線/淡入 Home 頁面的 YouTube 背景音樂
+        const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
+        if (player && typeof player.playVideo === 'function' && !window.ytError) {
+            this.fadeYouTubeVolume(1.0, 1500);
+        } else {
+            // 若之前 YT 連線失敗或現在仍然失敗，淡入備用風聲
+            window.ytError = true;
+            if (this.ambientWind) {
+                this.ambientWind.muted = this.bgmMuted;
+                this.ambientWind.volume = 0;
+                this.fadeAudio(this.ambientWind, (targetVol / 100) * 0.7, 1500);
+            }
         }
     }
 }
@@ -683,13 +771,13 @@ useEffect(() => {
         const currentIndex = POEMS.findIndex(p => p.id === readingPoem.id);
         if (currentIndex === -1) return;
 
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (e.key === 'ArrowLeft') {
             e.preventDefault(); // 防止畫面跟著捲動
             const prevIndex = currentIndex > 0 ? currentIndex - 1 : POEMS.length - 1;
             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
             setReadingPoem(POEMS[prevIndex]);
         } 
-        else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        else if (e.key === 'ArrowRight') {
             e.preventDefault();
             const nextIndex = currentIndex < POEMS.length - 1 ? currentIndex + 1 : 0;
             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
@@ -702,7 +790,7 @@ useEffect(() => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-}, [readingPoem]); // 依賴項為 readingPoem，當它改變時重新綁定
+}, [readingPoem]); 
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
@@ -747,20 +835,10 @@ useEffect(() => {
     };
 
 useEffect(() => {
-    // 讓 SoundManager 套用全域的 BGM 與 SFX 狀態
+    // 將所有邏輯全權交給 SoundManager 處理，避免 React 多管閒事覆蓋掉 Game Mode 的淡出狀態
     if (window.SM || typeof SM !== 'undefined') {
         const soundManager = window.SM || SM;
         soundManager.applySettings(audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx, true);
-    }
-    
-    // 控制 YouTube 的播放/暫停
-    const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
-    if (player && typeof player.playVideo === 'function') {
-        if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
-            player.playVideo(); 
-        } else {
-            player.pauseVideo(); 
-        }
     }
 }, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
 
@@ -902,7 +980,12 @@ useEffect(() => {
         }
     };
 
-    const handlePoemComplete = (id) => {
+const handlePoemComplete = (id) => {
+        // 【新增這行】：通知音效管理器退出遊戲模式，執行雙向淡出淡入
+        if (window.SM || typeof SM !== 'undefined') {
+            window.SM.exitGameMode();
+        }
+
         const currentIndex = POEMS.findIndex(p => p.id === id);
         if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
             const nextId = POEMS[currentIndex + 1].id;
@@ -1448,7 +1531,7 @@ onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
 </button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10">
+                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10 scroll-smooth">
                                     <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                                     
                                     {/* 【修改】加上 fullText select-text 允許手動劃選文字 */}
@@ -1829,7 +1912,7 @@ onKeyDown={(e) => {
                     )}
 
                     {showCompletion && (
-                        <div className="absolute inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
+                        <div className="absolute inset-0 bg-black/65 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
                             <div className="relative w-full max-w-[280px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-6 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.2)]">
                                 <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
                                 <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
