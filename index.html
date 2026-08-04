@@ -211,6 +211,10 @@
 .fade-mask-list {
 transform: translateZ(0);
 -webkit-transform: translateZ(0);
+-webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+background-color: transparent;
+will-change: mask-image;
 -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
@@ -396,14 +400,28 @@ class SoundManager {
         this.isGameMode = false;  
     }
 
-    applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
+applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
         this.bgmMuted = !bgm;
         this.userBgmVolume = bgmVolume;
         this.sfxMuted = !sfx;
 
-        if (isManualUpdate && this.ytFadeInterval) {
-            clearInterval(this.ytFadeInterval);
-            this.ytFadeInterval = null;
+        // 當使用者手動拉動搖桿時，必須強制中斷所有正在進行的「自動淡入/淡出」動畫，否則搖桿設定會被蓋掉
+        if (isManualUpdate) {
+            // 清除 YouTube 的淡入出
+            if (this.ytFadeInterval) {
+                clearInterval(this.ytFadeInterval);
+                this.ytFadeInterval = null;
+            }
+            // 清除關卡主音樂的淡入出
+            if (this.currentAmbience && this.currentAmbience.fadeInterval) {
+                clearInterval(this.currentAmbience.fadeInterval);
+                this.currentAmbience.fadeInterval = null;
+            }
+            // 清除備用風聲的淡入出
+            if (this.ambientWind && this.ambientWind.fadeInterval) {
+                clearInterval(this.ambientWind.fadeInterval);
+                this.ambientWind.fadeInterval = null;
+            }
         }
 
         // 環境場景音效明確綁定 sfxMuted 開關 (this.sfx的控制獨立於背景音樂)
