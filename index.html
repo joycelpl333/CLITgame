@@ -211,6 +211,10 @@
 .fade-mask-list {
 transform: translateZ(0);
 -webkit-transform: translateZ(0);
+-webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+background-color: transparent;
+will-change: mask-image;
 -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 1) 0%,
@@ -357,26 +361,100 @@ async function preloadFonts() {
     return Promise.resolve();
 }
             
-        let ytPlayer;
-window.onYouTubeIframeAPIReady = function() {
-          window.ytError = false;
-          ytPlayer = new YT.Player('yt-player', {
-            height: '0', width: '0', videoId: '11pvOw2DZ58',
-            playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '11pvOw2DZ58' },
-            events: {
-              'onReady': (event) => {
-                event.target.unMute();
-                event.target.setVolume(100);
-            },
-            'onError': (event) => {
-                console.warn("YouTube 載入失敗，將啟用風聲作為後備音源");
-                window.ytError = true;
-                if (window.SM) window.SM.startAmbient();
-              }
-            }
-          });
-        }
+let ytPlayer;
+// 全局 YouTube 播放器動態初始化 / 重新建立函數
+window.initOrResetYTPlayer = function(callback) {
+    console.log("[Audio Debug] 🔄 正在嘗試初始化 / 重置 YouTube 播放器...");
 
+    // 1. 如果已有損毀或舊的實例，強制銷毀
+    if (window.ytPlayer && typeof window.ytPlayer.destroy === 'function') {
+        try {
+            window.ytPlayer.destroy();
+            console.log("[Audio Debug] 🗑️ 舊的 YouTube 播放器實例已銷毀");
+        } catch (e) {
+            console.warn("[Audio Debug] 銷毀舊實例時出錯:", e);
+        }
+    }
+
+    // 2. 確保 DOM 容器存在，如果被 React 移除則自動重新創建
+    let ytContainer = document.getElementById('yt-player');
+    if (!ytContainer) {
+        ytContainer = document.createElement('div');
+        ytContainer.id = 'yt-player';
+        ytContainer.style.display = 'none';
+        document.body.appendChild(ytContainer);
+    }
+
+    window.ytError = false;
+    window.ytPlayerReady = false;
+
+    // 創建 YT 實例的核心邏輯
+    const createYTInstance = () => {
+        try {
+            window.ytPlayer = new YT.Player('yt-player', {
+                height: '0',
+                width: '0',
+                videoId: '11pvOw2DZ58',
+                playerVars: {
+                    'autoplay': 0, // 💡 刷新頁面時絕不預設 autoplay，避免被瀏覽器直接封鎖死
+                    'loop': 1,
+                    'playlist': '11pvOw2DZ58',
+                    'controls': 0,
+                    'enablejsapi': 1,
+                    'origin': window.location.origin
+                },
+                events: {
+                    'onReady': (event) => {
+                        console.log("[Audio Debug] 🎵 YouTube 播放器已成功建立 (Ready)");
+                        window.ytPlayerReady = true;
+                        if (window.SM) {
+                            window.SM.updateActualVolume();
+                        }
+                        if (callback) callback(true);
+                    },
+                    'onStateChange': (event) => {
+                        const stateNames = { "-1": "未開始", "0": "結束", "1": "播放中", "2": "暫停", "3": "緩衝中", "5": "已就緒" };
+                        console.log(`[Audio Debug] 🎵 YT 狀態變更: ${event.data} (${stateNames[event.data] || '未知'})`);
+                    },
+                    'onError': (event) => {
+                        console.warn("[Audio Debug] ❌ YouTube 載入/播放失敗 (錯誤碼:", event.data, ")");
+                        window.ytError = true;
+                        if (window.SM) window.SM.updateActualVolume();
+                        if (callback) callback(false);
+                    }
+                }
+            });
+        } catch (err) {
+            console.error("[Audio Debug] ❌ 創建 YT Player 實例失敗:", err);
+            window.ytError = true;
+            if (window.SM) window.SM.updateActualVolume();
+            if (callback) callback(false);
+        }
+    };
+
+    // 3. 處理快取問題：若 API 已經在 Window 上，直接建立；否則等待 API Ready
+    if (window.YT && window.YT.Player) {
+        createYTInstance();
+    } else {
+        window.onYouTubeIframeAPIReady = createYTInstance;
+        
+        // 若 API 腳本尚未載入，動態插入腳本
+        if (!document.getElementById('yt-iframe-api-script')) {
+            const tag = document.createElement('script');
+            tag.id = 'yt-iframe-api-script';
+            tag.src = "https://www.youtube.com/iframe_api";
+            const firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        }
+    }
+};
+
+// 頁面首次載入時執行一次
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    window.initOrResetYTPlayer();
+} else {
+    window.addEventListener('DOMContentLoaded', () => window.initOrResetYTPlayer());
+}
 class SoundManager {
     constructor() {
         this.sfx = {
@@ -391,9 +469,9 @@ class SoundManager {
         
         // 狀態管理
         this.bgmMuted = false;
-        this.userBgmVolume = 100; // 獨立儲存玩家在搖桿上設定的基礎音量
-        this.sfxMuted = false;    // 預設為開啟 (false)
-        this.isGameMode = false;  // 記錄是否處於閱讀模式
+        this.userBgmVolume = 100; 
+        this.sfxMuted = false;    
+        this.isGameMode = false;  
     }
 
     applySettings(bgm, bgmVolume, sfx, isManualUpdate = false) {
@@ -401,61 +479,123 @@ class SoundManager {
         this.userBgmVolume = bgmVolume;
         this.sfxMuted = !sfx;
 
-        if (isManualUpdate && this.ytFadeInterval) {
-            clearInterval(this.ytFadeInterval);
-            this.ytFadeInterval = null;
-        }
-
-        // 環境場景音效明確綁定 sfxMuted 開關
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.sfxMuted;
+        // 當使用者手動拉動搖桿或切換靜音時，強制中斷所有淡入出動畫，直接套用設定
+        if (isManualUpdate) {
+            if (this.ytFadeInterval) {
+                clearInterval(this.ytFadeInterval);
+                this.ytFadeInterval = null;
+            }
+            if (this.currentAmbience && this.currentAmbience.fadeInterval) {
+                clearInterval(this.currentAmbience.fadeInterval);
+                this.currentAmbience.fadeInterval = null;
+            }
+            if (this.ambientWind && this.ambientWind.fadeInterval) {
+                clearInterval(this.ambientWind.fadeInterval);
+                this.ambientWind.fadeInterval = null;
+            }
         }
 
         this.updateActualVolume();
     }
 
-    // 根據當前狀態更新實際輸出的音量，不再干擾 React 的設定 State
-    updateActualVolume() {
-        if (this.ytFadeInterval) return;
+    // 動態分配音量：將 YT、關卡音樂、風聲統一視為「背景音樂 (BGM)」
+updateActualVolume() {
+        if (this.ytFadeInterval && !this.isManualUpdating) return; 
 
         const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-        // 如果在遊戲內，音量縮小至設定值的 20%
-        const ytVol = this.isGameMode ? targetVol * 0.2 : targetVol;
-
-        // 如果目前是播放後備風聲，套用 BGM 的音量
-        if (this.ambientWind) {
-            this.ambientWind.volume = (ytVol / 100) * 0.7;
-            this.ambientWind.muted = this.bgmMuted;
-        }
-        if (this.currentAmbience) {
-            this.currentAmbience.muted = this.bgmMuted;
-            // (targetVol / 100) * 0.9 表示最高音量上限為 0.9，防止音訊爆音
-            this.currentAmbience.volume = (targetVol / 100) * 0.9; 
-        }
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
-        if (player && typeof player.setVolume === 'function') {
-            player.setVolume(ytVol);
-        }
-    }
 
-    // 淡入淡出邏輯，只改變硬體播放音量，不呼叫 setState 改變搖桿位置
-    fadeYouTubeVolume(targetRatio, duration = 1000) {
+        console.log(`[Audio Debug] 🔊 執行 updateActualVolume | 目標音量: ${targetVol} | 模式: ${this.isGameMode ? 'Game' : 'Home'}`);
+
+        if (!this.isGameMode) {
+            // 【 Home Page 狀態 】
+            if (this.currentAmbience) {
+                this.currentAmbience.pause();
+            }
+            
+            if (player && window.ytPlayerReady && !window.ytError) {
+                try {
+                    const ytState = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
+                    
+                    if (typeof player.isMuted === 'function' && player.isMuted()) {
+                        player.unMute();
+                    }
+
+                    player.setVolume(targetVol);
+
+                    if (targetVol > 0) {
+                        // 如果狀態是 -1 (未開始) 或 2 (暫停)，嘗試播放
+                        if (ytState !== 1) {
+                            console.log(`[Audio Debug] 🎵 嘗試播放 YouTube (當前狀態: ${ytState})`);
+                            player.playVideo();
+                        }
+                    } else {
+                        if (ytState === 1) player.pauseVideo();
+                    }
+                    if (this.ambientWind) this.ambientWind.pause(); 
+                } catch (e) {
+                    console.error("[Audio Debug] ❌ 控制 YouTube 時發生異常，觸發動態修復...", e);
+                    window.ytError = true;
+                    // 當 YT 播放發生例外，自動嘗試重置 YouTube 播放器 DOM
+                    if (typeof window.initOrResetYTPlayer === 'function') {
+                        window.initOrResetYTPlayer();
+                    }
+                }
+            } else {
+                // 如果 YT 處於錯誤或未就緒狀態
+                if (targetVol > 0 && !window.ytPlayerReady && typeof window.initOrResetYTPlayer === 'function') {
+                    console.log("[Audio Debug] ⚠️ YT 未就緒，嘗試重新初始化 YT...");
+                    window.initOrResetYTPlayer();
+                }
+
+                // 備用風聲
+                if (this.ambientWind) {
+                    this.ambientWind.volume = (targetVol / 100) * 0.7;
+                    if (targetVol > 0) this.ambientWind.play().catch(()=>{});
+                    else this.ambientWind.pause();
+                }
+            }
+        } else {
+            // 【 Game Page 狀態 】
+            if (player && typeof player.setVolume === 'function') {
+                player.setVolume(0);
+                if (typeof player.pauseVideo === 'function') player.pauseVideo();
+            }
+            if (this.currentAmbience) {
+                this.currentAmbience.volume = (targetVol / 100) * 0.9;
+                if (targetVol > 0) this.currentAmbience.play().catch(()=>{});
+                else this.currentAmbience.pause();
+                if (this.ambientWind) this.ambientWind.pause();
+            } else if (this.ambientWind) {
+                this.ambientWind.volume = (targetVol / 100) * 0.7;
+                if (targetVol > 0) this.ambientWind.play().catch(()=>{});
+                else this.ambientWind.pause();
+            }
+        }
+    }  
+
+    fadeYouTubeVolume(targetRatio, duration = 1500) {
         const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
         if (!player || typeof player.getVolume !== 'function') return;
 
         if (this.ytFadeInterval) clearInterval(this.ytFadeInterval);
 
-        if (this.bgmMuted) {
+        if (this.bgmMuted || this.userBgmVolume === 0) {
             player.setVolume(0);
-            if (this.ambientWind) this.ambientWind.volume = 0;
+            if (typeof player.pauseVideo === 'function') player.pauseVideo();
             return;
         }
 
         let currentVolume = player.getVolume();
-        const targetVolume = this.userBgmVolume * targetRatio; // 基於玩家搖桿設定值去乘以比例
+        const targetVolume = this.userBgmVolume * targetRatio; 
         const steps = 20; 
         const intervalTime = duration / steps;
         const volumeStep = (targetVolume - currentVolume) / steps;
+
+        // 若是淡入且為暫停狀態，先啟動播放
+        if (targetRatio > 0 && typeof player.playVideo === 'function') {
+            player.playVideo(); 
+        }
 
         this.ytFadeInterval = setInterval(() => {
             currentVolume += volumeStep;
@@ -464,14 +604,39 @@ class SoundManager {
                 (volumeStep < 0 && currentVolume <= targetVolume)) {
                 
                 player.setVolume(targetVolume);
-                if (this.ambientWind) this.ambientWind.volume = (targetVolume / 100) * 0.7;
-                
+                // 淡出到底時暫停播放節省資源
+                if (targetRatio === 0 && typeof player.pauseVideo === 'function') {
+                    player.pauseVideo();
+                }
                 clearInterval(this.ytFadeInterval);
                 this.ytFadeInterval = null;
             } else {
-                const stepVol = Math.round(currentVolume);
-                player.setVolume(stepVol);
-                if (this.ambientWind) this.ambientWind.volume = (stepVol / 100) * 0.7;
+                player.setVolume(Math.round(currentVolume));
+            }
+        }, intervalTime);
+    }
+
+    fadeAudio(audioElement, targetVol, duration = 1500, callback) {
+        if (!audioElement) return;
+        if (audioElement.fadeInterval) clearInterval(audioElement.fadeInterval);
+        
+        const steps = 20;
+        const intervalTime = duration / steps;
+        let currentVol = audioElement.volume || 0;
+        const volumeStep = (targetVol - currentVol) / steps;
+        
+        // 確保淡入前是播放狀態
+        if (targetVol > 0 && !this.bgmMuted) audioElement.play().catch(()=>{});
+
+        audioElement.fadeInterval = setInterval(() => {
+            currentVol += volumeStep;
+            if ((volumeStep > 0 && currentVol >= targetVol) || (volumeStep < 0 && currentVol <= targetVol)) {
+                audioElement.volume = Math.max(0, Math.min(1, targetVol));
+                clearInterval(audioElement.fadeInterval);
+                audioElement.fadeInterval = null;
+                if (callback) callback();
+            } else {
+                audioElement.volume = Math.max(0, Math.min(1, currentVol));
             }
         }, intervalTime);
     }
@@ -481,42 +646,95 @@ class SoundManager {
         if (this.sfx[name]) {
             const soundClone = this.sfx[name].cloneNode();
             soundClone.volume = volume;
-            soundClone.play().catch(e => console.log('音效播放受限:', e));
+            soundClone.play().catch(() => {}); // 避免連續點擊報錯
         }
     }
 
     startAmbient() {
-        // 唯有當 YT 載入錯誤時，才啟動風聲作為後備
-        if (window.ytError) {
-            const targetVol = this.bgmMuted ? 0 : (this.isGameMode ? this.userBgmVolume * 0.2 : this.userBgmVolume);
+        if (window.ytError && !this.isGameMode) {
+            const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
             this.ambientWind.volume = (targetVol / 100) * 0.7;
             this.ambientWind.muted = this.bgmMuted;
-            this.ambientWind.play().catch(e => console.log('環境音播放受限:', e));
+            if (targetVol > 0) this.ambientWind.play().catch(()=>{});
         }
     }
 
     enterGameMode(audioSrc) {
         this.isGameMode = true;
-        this.fadeYouTubeVolume(0.2, 1500); // 傳入 0.2 比例
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
         
+        // 1. YouTube 完全淡出
+        this.fadeYouTubeVolume(0, 1500); 
+
+        // 2. 如果正在播放 Home 頁面的備用風聲，將其淡出停止
+        if (this.ambientWind && !this.ambientWind.paused && window.ytError) {
+             this.fadeAudio(this.ambientWind, 0, 1000, () => this.ambientWind.pause());
+        }
+
+        // 3. 淡入關卡背景音樂
         if (audioSrc) {
-            if (this.currentAmbience) this.currentAmbience.pause();
-            this.currentAmbience = new Audio(audioSrc);
+            if (this.currentAmbience && this.currentAmbience.src !== new URL(audioSrc, document.baseURI).href) {
+                this.currentAmbience.pause();
+                this.currentAmbience = new Audio(audioSrc);
+            } else if (!this.currentAmbience) {
+                this.currentAmbience = new Audio(audioSrc);
+            }
             this.currentAmbience.loop = true;
             this.currentAmbience.muted = this.bgmMuted;
-            const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
-            this.currentAmbience.volume = (targetVol / 100) * 0.9;
-            this.currentAmbience.play().catch(e => console.log('篇章音效播放受限:', e));
+            this.currentAmbience.volume = 0; 
+            
+            if (targetVol > 0 && !this.bgmMuted) {
+                this.fadeAudio(this.currentAmbience, (targetVol / 100) * 0.9, 1500);
+            }
+        } else {
+            // 如果這關沒有配置音效，就選用 ambientWind 作為備用關卡 BGM
+            this.currentAmbience = null;
+            if (this.ambientWind) {
+                this.ambientWind.muted = this.bgmMuted;
+                this.ambientWind.volume = 0;
+                if (targetVol > 0 && !this.bgmMuted) {
+                    this.fadeAudio(this.ambientWind, (targetVol / 100) * 0.7, 1500);
+                }
+            }
         }
     }
 
     exitGameMode() {
         this.isGameMode = false;
-        this.fadeYouTubeVolume(1.0, 1500); // 傳回 1.0 比例
+        const targetVol = this.bgmMuted ? 0 : this.userBgmVolume;
 
+        // 1. 淡出關卡背景音樂 或 關卡中的風聲
         if (this.currentAmbience) {
-            this.currentAmbience.pause();
-            this.currentAmbience = null;
+            this.fadeAudio(this.currentAmbience, 0, 1000, () => {
+                if (this.currentAmbience) this.currentAmbience.pause();
+            });
+        } else if (this.ambientWind) {
+            this.fadeAudio(this.ambientWind, 0, 1000, () => {
+                this.ambientWind.pause();
+            });
+        }
+        
+        // 2. 重新嘗試連線並淡入 Home 頁面的 YouTube BGM
+        const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
+        if (player && typeof player.playVideo === 'function') {
+            window.ytError = false; // 重置錯誤狀態，給予重試機會
+            try {
+                player.playVideo();
+                this.fadeYouTubeVolume(1.0, 1500);
+            } catch (e) {
+                window.ytError = true;
+            }
+        } else {
+            window.ytError = true;
+        }
+
+        // 3. 若 YT 連線失敗，淡入備用風聲
+        if (window.ytError && this.ambientWind) {
+            this.ambientWind.muted = this.bgmMuted;
+            this.ambientWind.volume = 0;
+            if (targetVol > 0 && !this.bgmMuted) {
+                this.fadeAudio(this.ambientWind, (targetVol / 100) * 0.7, 1500);
+            }
         }
     }
 }
@@ -632,10 +850,67 @@ function App() {
     const [toastMessage, setToastMessage] = useState('');
     const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
     const timerRef = useRef(null); 
-
+const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
     // UI 預熱與預載狀態管理
     const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
     const [isPreloaded, setIsPreloaded] = useState(false);
+
+useEffect(() => {
+    const handleGlobalInteraction = () => {
+        console.log("[Audio Debug] 🔓 偵測到使用者實體點擊，進行全域音訊檢查與解鎖...");
+
+        const soundManager = window.SM || (typeof SM !== 'undefined' ? SM : null);
+        const player = window.ytPlayer;
+
+        // 1. 解鎖 HTML5 Audio 權限
+        if (soundManager && soundManager.ambientWind) {
+            soundManager.ambientWind.play().then(() => {
+                if (soundManager.bgmMuted || soundManager.userBgmVolume === 0 || soundManager.isGameMode) {
+                    soundManager.ambientWind.pause();
+                }
+            }).catch(() => {});
+        }
+
+        // 2. 檢查 YouTube 播放器狀況
+        if (player && window.ytPlayerReady && !window.ytError) {
+            try {
+                const currentState = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
+                player.unMute();
+
+                // 如果點擊後 YT 依然卡在 -1 (未開始)，說明被瀏覽器刷新政策封鎖了，執行現場重建！
+                if (currentState === -1 || currentState === 5) {
+                    console.log("[Audio Debug] ⚠️ 偵測到 YouTube 因頁面刷新被封鎖，執行【現場無痛重建】...");
+                    if (typeof window.initOrResetYTPlayer === 'function') {
+                        window.initOrResetYTPlayer((success) => {
+                            if (success && window.SM) window.SM.updateActualVolume();
+                        });
+                    }
+                } else {
+                    if (soundManager) soundManager.updateActualVolume();
+                }
+            } catch (e) {
+                console.warn("[Audio Debug] 檢查 YT 失敗，觸發重建:", e);
+                if (typeof window.initOrResetYTPlayer === 'function') {
+                    window.initOrResetYTPlayer();
+                }
+            }
+        } else {
+            // 如果當前根本沒有 YT 實例，嘗試建立
+            if (typeof window.initOrResetYTPlayer === 'function') {
+                window.initOrResetYTPlayer();
+            }
+        }
+    };
+
+    // 監聽點擊與觸控
+    window.addEventListener('click', handleGlobalInteraction);
+    window.addEventListener('touchstart', handleGlobalInteraction, { passive: true });
+
+    return () => {
+        window.removeEventListener('click', handleGlobalInteraction);
+        window.removeEventListener('touchstart', handleGlobalInteraction);
+    };
+}, []);
 
     // 滾動容器的 Ref
     const scrollContainerRef = useRef(null);
@@ -656,7 +931,25 @@ function App() {
             if (el) el.classList.remove('is-scrolling');
         }, 600);
     };
-
+const unlockAudioContext = () => {
+    if (!isAudioUnlocked && (window.SM || typeof SM !== 'undefined')) {
+        const soundManager = window.SM || SM;
+        
+        // 靜音播放一次風聲與點擊聲來解鎖瀏覽器 Web Audio API 限制
+        if (soundManager.ambientWind) {
+            soundManager.ambientWind.play().then(() => {
+                soundManager.ambientWind.pause();
+            }).catch(() => {});
+        }
+        if (soundManager.sfx.click) {
+            soundManager.sfx.click.play().then(() => {
+                soundManager.sfx.click.pause();
+            }).catch(() => {});
+        }
+        
+        setIsAudioUnlocked(true);
+    }
+};
     // 當分頁切換時，滾動到頂部
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -747,20 +1040,10 @@ useEffect(() => {
     };
 
 useEffect(() => {
-    // 讓 SoundManager 套用全域的 BGM 與 SFX 狀態
+    // 將所有邏輯全權交給 SoundManager 處理，避免 React 多管閒事覆蓋掉 Game Mode 的淡出狀態
     if (window.SM || typeof SM !== 'undefined') {
         const soundManager = window.SM || SM;
         soundManager.applySettings(audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx, true);
-    }
-    
-    // 控制 YouTube 的播放/暫停
-    const player = window.ytPlayer || (typeof ytPlayer !== 'undefined' ? ytPlayer : null);
-    if (player && typeof player.playVideo === 'function') {
-        if (audioSettings.bgm && audioSettings.bgmVolume > 0) {
-            player.playVideo(); 
-        } else {
-            player.pauseVideo(); 
-        }
     }
 }, [audioSettings.bgm, audioSettings.bgmVolume, audioSettings.sfx]);
 
@@ -825,35 +1108,37 @@ useEffect(() => {
 }, []);
 
     // 🌟 2. 點擊開始按鈕
-    const startGame = () => {
-        const player = window.ytPlayer;
-        if (player && typeof player.playVideo === 'function' && !window.ytError) {
-            try {
-                player.unMute();
-                player.setVolume(SM.userBgmVolume|| 100); // 改為讀取基礎音量
-                player.playVideo();
-            } catch(e) {
-                console.warn("YouTube 播放受到瀏覽器阻擋", e);
-                window.ytError = true;
-                SM.startAmbient();
-            }
-        } else {
-            // YT 失效狀態下直接播放後備音效
+const startGame = () => {
+    // 確保 Audio API 已解鎖
+    unlockAudioContext(); 
+    
+    const player = window.ytPlayer;
+    if (player && typeof player.playVideo === 'function' && !window.ytError) {
+        try {
+            // 先確保取消靜音並設定音量
+            player.unMute();
+            player.setVolume(audioSettings.bgm ? audioSettings.bgmVolume : 0); 
+            player.playVideo();
+        } catch(e) {
+            console.warn("YouTube 播放受到瀏覽器阻擋", e);
             window.ytError = true;
-            SM.startAmbient();
+            if (window.SM) window.SM.startAmbient();
         }
+    } else {
+        window.ytError = true;
+        if (window.SM) window.SM.startAmbient();
+    }
 
-        SM.playSFX('click', 0.8);
-        setIsLeavingStart(true);
-        setTimeout(() => {
-            // 若在 Start 頁面停留期間資產已預載完成，直接轉至 home；否則進入 loading 頁面等待
-            if (isPreloaded) {
-                setCurrentPage('home');
-            } else {
-                setCurrentPage('loading');
-            }
-        }, 300);
-    };
+    if (window.SM) window.SM.playSFX('click', 0.8);
+    setIsLeavingStart(true);
+    setTimeout(() => {
+        if (isPreloaded) {
+            setCurrentPage('home');
+        } else {
+            setCurrentPage('loading');
+        }
+    }, 300);
+};
 
     // 🌟 3. 保留 loading 頁面的獨立預載備案（當使用者極快點擊 Start 按鈕時執行）
     useEffect(() => {
@@ -902,7 +1187,12 @@ useEffect(() => {
         }
     };
 
-    const handlePoemComplete = (id) => {
+const handlePoemComplete = (id) => {
+        // 【新增這行】：通知音效管理器退出遊戲模式，執行雙向淡出淡入
+        if (window.SM || typeof SM !== 'undefined') {
+            window.SM.exitGameMode();
+        }
+
         const currentIndex = POEMS.findIndex(p => p.id === id);
         if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
             const nextId = POEMS[currentIndex + 1].id;
@@ -1011,9 +1301,9 @@ if (currentPage === 'start') {
             if (currentPage === 'home') {
     const cardFonts = getCardFontClasses();
     return (
-        <div className="app-container h-dvh w-full overflow-hidden bg-contain bg-no-repeat bg-center flex flex-col justify-between animate-fade-in">
+        <div className="app-container h-dvh w-full overflow-hidden flex flex-col justify-between animate-fade-in" style={{ backgroundColor: 'var(--bg-dark)' }}>
             {/* 背景圖 */}
-            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', mixBlendMode: 'overlay' }}></div>
+            <div className="absolute inset-0 opacity-30 contrast-125 pointer-events-none" style={{ backgroundImage: "url('./game.webp')", backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'opacity'}}></div>
             
             {/* 頂部 Header */}
             <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
@@ -1038,7 +1328,7 @@ if (currentPage === 'start') {
                             <p className="text-[#c9a76b] text-base font-bold pt-3 tracking-widest">探索詩境之美</p>
                             <p className="text-gray-400 text-[11px] tracking-wider mt-0.5">走進詩人的世界，感受文字背後的意境</p>
                         </div>
-                        <h3 className="shrink-0 text-xs text-gray-500 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
+                        <h3 className="shrink-0 text-xs text-gray-400 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
                         
                         <div className="space-y-3.5 pb-10 fade-mask-list">
                             {POEMS.map((poem, idx) => {
@@ -1498,22 +1788,22 @@ onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
             return null;
         };
 return (
-            <div className="viewport-container">
-                {/* 動態毛玻璃背景 */}
-                <div 
-                    className="viewport-bg-blur"
-                    style={{ backgroundImage: `url('${activeBgImage}')` }}
-                />
+    <div className="viewport-container" onClick={unlockAudioContext}>
+        {/* 動態毛玻璃背景 */}
+        <div 
+            className="viewport-bg-blur"
+            style={{ backgroundImage: `url('${activeBgImage}')` }}
+        />
 
-                {/* 隱形預載容器 */}
-                {renderPreloadContainer()}
+        {/* 隱形預載容器 */}
+        {renderPreloadContainer()}
 
-                {/* 中央 9:16 畫框 */}
-                <div className="game-frame">
-                    {renderPageContent()}
-                </div>
-            </div>
-        );
+        {/* 中央 9:16 畫框 */}
+        <div className="game-frame">
+            {renderPageContent()}
+        </div>
+    </div>
+);
     }
 
         function GamePlayArea({ poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound,audioSettings, setAudioSettings, fontSize, setFontSize }) {
