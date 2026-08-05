@@ -267,7 +267,7 @@ will-change: mask-image;
 
 /* 正確的 CSS Hover 與 Active 寫法 */
 .guofeng-btn-pulse:hover {
-  transform: scale(1.05) !important; /* !important 確保優先權高於動畫 */
+  transform: scale(1.0) !important; /* !important 確保優先權高於動畫 */
 }
 
 .guofeng-btn-pulse:active {
@@ -1321,12 +1321,12 @@ if (currentPage === 'start') {
             <>
                 {renderPreloadContainer()}
                 <div 
-                    className={`app-container bg-contain bg-no-repeat bg-center flex flex-col items-center justify-center relative select-none ${isLeavingStart ? 'animate-fade-out' : 'animate-fade-in'}`} 
+                    className={`app-container min-h-screen w-full bg-cover bg-no-repeat bg-center flex flex-col items-center justify-center relative select-none ${isLeavingStart ? 'animate-fade-out' : 'animate-fade-in'}`} 
                     style={{ backgroundImage: "url('./start.webp')" }}
                 >
                     <button 
                         onClick={startGame} aria-label="開始"
-                        className="absolute bottom-[50%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center z-20 clickable-hotspot guofeng-btn-pulse" 
+                        className="absolute bottom-[37%] w-[50%] h-[10%] bg-contain bg-no-repeat bg-center z-20 clickable-hotspot guofeng-btn-pulse scale-90 origin-bottom" 
                         style={{ backgroundImage: "url('./startbtn.webp')" }} 
                     />
                 </div>
