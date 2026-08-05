@@ -306,50 +306,7 @@ const preloadAudio = (src) => {
         audio.load();
     });
 };
-const isTouchOrMobile = () => {
-    // 檢測是否為手機或 iPad (包含 iOS 13+ 的 iPad Pro 偽裝成 Mac 的情況)
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-    const isIPadOS = navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform);
-    
-    return isMobileUA || isIPadOS;
-};
 
-function AudioSettingsPanel() {
-    const [isMobile, setIsMobile] = useState(false);
-
-    useEffect(() => {
-        setIsMobile(isTouchOrMobile());
-    }, []);
-
-    return (
-        <div className="audio-control-panel">
-            {/* 靜音/開啟開關：手機與電腦皆能正常運作 */}
-            <button onClick={toggleBgm}>
-                {bgmOn ? '🔊 音樂開啟' : '🔇 音樂靜音'}
-            </button>
-
-            {/* 音量搖桿/滑桿：僅在電腦端 (非行動裝置) 顯示 */}
-            {!isMobile ? (
-                <div className="volume-slider-container">
-                    <label>背景音樂音量</label>
-                    <input 
-                        type="range" 
-                        min="0" 
-                        max="100" 
-                        value={bgmVolume} 
-                        onChange={(e) => handleVolumeChange(Number(e.target.value))} 
-                    />
-                </div>
-            ) : (
-                <p className="text-xs opacity-60 mt-1">
-                    💡 行動裝置（手機/iPad）請直接按壓裝置側邊的實體音量鍵調節音量。
-                </p>
-            )}
-        </div>
-    );
-}
-		
 // 確保 YouTube API 與 Player 準備就緒
 const checkYouTubeReady = () => {
     return new Promise((resolve) => {
@@ -897,6 +854,7 @@ const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
     // UI 預熱與預載狀態管理
     const [isUIWarmedUp, setIsUIWarmedUp] = useState(false);
     const [isPreloaded, setIsPreloaded] = useState(false);
+    const isTouchOrMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 useEffect(() => {
     const handleGlobalInteraction = () => {
@@ -1665,19 +1623,26 @@ onKeyDown={(e) => {
             <div className="space-y-4 mb-6 px-1">
                 {/* 背景音樂（結合 YouTube 及 遊戲場景音樂） */}
                 <div className="flex justify-between items-center">
-                    <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
-                    <input 
-                        type="range" 
-                        min="0" max="100" step="1"
-                        value={audioSettings.bgmVolume}
-                        onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
-                        className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
-                        style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
-                    />
-                    <button 
-                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
-                        onClick={() => {
-                            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
+    <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
+    
+    {/* 👇 2. 使用三元運算子：如果不是手機，顯示搖桿；如果是手機，顯示空白佔位 */}
+    {!isTouchOrMobile ? (
+        <input 
+            type="range" 
+            min="0" max="100" step="1"
+            value={audioSettings.bgmVolume}
+            onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
+            className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
+            style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
+        />
+    ) : (
+        <div className="w-[45%]"></div> /* 手機版佈局佔位，隱藏搖桿 */
+    )}
+
+    <button 
+        className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
+        onClick={() => {
+            if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             setAudioSettings({...audioSettings, bgm: !audioSettings.bgm});
                         }}
                     >
@@ -1862,8 +1827,10 @@ return (
             const [isEntryGlowing, setIsEntryGlowing] = useState(true);
             // 判斷是否背景音樂與環境音效都關閉了
             const isAllMuted = !audioSettings.bgm && !audioSettings.sfx;
-const dynamicTitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base' : 'text-sm';
-const dynamicSubtitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm';
+            const dynamicTitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base' : 'text-sm';
+            const dynamicSubtitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm';
+            const isTouchOrMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
             useEffect(() => {
                 const timer = setTimeout(() => setIsEntryGlowing(false), 2000);
                 return () => clearTimeout(timer);
@@ -2201,14 +2168,21 @@ onKeyDown={(e) => {
                 {/* 背景音樂開關 */}
                 <div className="flex justify-between items-center">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">背景音樂</span>
-                    <input 
-                        type="range" 
-                        min="0" max="100" step="1"
-                        value={audioSettings.bgmVolume}
-                        onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
-                        className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
-                        style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
-                    />
+                    
+                    {/* 👇 在這裡加入三元運算子判斷 */}
+                    {!isTouchOrMobile ? (
+                        <input 
+                            type="range" 
+                            min="0" max="100" step="1"
+                            value={audioSettings.bgmVolume}
+                            onChange={(e) => setAudioSettings({ ...audioSettings, bgmVolume: parseFloat(e.target.value), bgm: true })}
+                            className="w-[45%] h-1.5 bg-[#2d281f] rounded-lg appearance-none cursor-pointer accent-[#c9a76b]"
+                            style={{ opacity: audioSettings.bgm ? 1 : 0.4 }}
+                        />
+                    ) : (
+                        <div className="w-[45%]"></div> /* 觸控設備（含 iPad）顯示空白佔位，保持排版不變 */
+                    )}
+
                     <button 
                         className={`w-10 h-5 rounded-full relative transition-colors duration-300 clickable-hotspot ${audioSettings.bgm ? 'bg-[#c9a76b]' : 'bg-gray-700'}`} 
                         onClick={() => {
