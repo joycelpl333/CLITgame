@@ -306,7 +306,50 @@ const preloadAudio = (src) => {
         audio.load();
     });
 };
+const isTouchOrMobile = () => {
+    // 檢測是否為手機或 iPad (包含 iOS 13+ 的 iPad Pro 偽裝成 Mac 的情況)
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isIPadOS = navigator.maxTouchPoints && navigator.maxTouchPoints > 2 && /MacIntel/.test(navigator.platform);
+    
+    return isMobileUA || isIPadOS;
+};
 
+function AudioSettingsPanel() {
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        setIsMobile(isTouchOrMobile());
+    }, []);
+
+    return (
+        <div className="audio-control-panel">
+            {/* 靜音/開啟開關：手機與電腦皆能正常運作 */}
+            <button onClick={toggleBgm}>
+                {bgmOn ? '🔊 音樂開啟' : '🔇 音樂靜音'}
+            </button>
+
+            {/* 音量搖桿/滑桿：僅在電腦端 (非行動裝置) 顯示 */}
+            {!isMobile ? (
+                <div className="volume-slider-container">
+                    <label>背景音樂音量</label>
+                    <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        value={bgmVolume} 
+                        onChange={(e) => handleVolumeChange(Number(e.target.value))} 
+                    />
+                </div>
+            ) : (
+                <p className="text-xs opacity-60 mt-1">
+                    💡 行動裝置（手機/iPad）請直接按壓裝置側邊的實體音量鍵調節音量。
+                </p>
+            )}
+        </div>
+    );
+}
+		
 // 確保 YouTube API 與 Player 準備就緒
 const checkYouTubeReady = () => {
     return new Promise((resolve) => {
