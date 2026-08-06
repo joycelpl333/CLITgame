@@ -288,10 +288,10 @@ const preloadAudio = (src) => {
         const audio = new Audio();
         audio.src = src;
         
-        // 3秒逾時機制，避免 Promise 卡死全站
+        // 2秒逾時機制，避免 Promise 卡死全站
         const timer = setTimeout(() => {
             resolve({ status: 'timeout', src });
-        }, 3000);
+        }, 2000);
 
         audio.addEventListener('canplaythrough', () => {
             clearTimeout(timer);
@@ -317,7 +317,7 @@ const checkYouTubeReady = () => {
         const interval = setInterval(() => {
             checks++;
             if ((window.ytPlayer && typeof window.ytPlayer.playVideo === 'function') || window.ytError || checks > 30) {
-                clearInterval(interval);
+                window.ytError = true; clearInterval(interval);
                 resolve();
             }
         }, 100);
@@ -1055,7 +1055,7 @@ useEffect(() => {
 
     const triggerToast = (msg) => {
         setToastMessage(msg);
-        setTimeout(() => setToastMessage(''), 3000);
+        setTimeout(() => setToastMessage(''), 2000);
     };
 
     // 複製全文至剪貼簿函式
@@ -1410,7 +1410,15 @@ if (currentPage === 'start') {
                                         className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'}`}
                                     >
                                         <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
-                                            {isUnlocked ? <img src={poem.bgImage} alt={poem.title} className="w-full h-full object-cover opacity-50" /> : idx + 1}
+                                            <img 
+        src={poem.bgImage || './loading.webp'} 
+        alt={poem.title} 
+        onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = './loading.webp';
+        }}
+        className={`w-full h-full object-cover ${isUnlocked ? 'opacity-70' : 'opacity-40 grayscale-[20%]'}`} 
+    />
                                         </div>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">
