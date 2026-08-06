@@ -1683,7 +1683,7 @@ onKeyDown={(e) => {
     <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
         <div role="dialog" 
             aria-modal="true" 
-            aria-labelledby="settings-title" className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+            aria-labelledby="settings-title" className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-5 text-[#e0d5ba] shadow-[0_0_20px_rgba(201,167,107,0.15)]">
             <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
             
             <div className="space-y-4 mb-6 px-1">
@@ -1898,6 +1898,8 @@ return (
             const dynamicTitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base' : 'text-sm';
             const dynamicSubtitleSize = fontSize === 'sm' ? 'text-xs' : fontSize === 'lg' ? 'text-base md:text-lg' : 'text-sm';
             const isTouchOrMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const [showProgressModal, setShowProgressModal] = useState(false);
+const [progressTab, setProgressTab] = useState('collected'); // 'collected' | 'full'
 
             useEffect(() => {
                 const timer = setTimeout(() => setIsEntryGlowing(false), 2000);
@@ -1985,14 +1987,13 @@ const handleStampAction = () => {
                         <img src={poem.bgImage} alt="Backdrop" className="w-full h-full opacity-100" />
                     </div>
                     
-                    <div className="absolute top-0 left-0 w-full py-2 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/55 backdrop-blur-[1px]">
-                        <button onClick={onBack} className="pointer-events-auto p-1.5 clickable-hotspot" aria-label="返回">
+                    <div className="absolute top-0 left-0 w-full py-1 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/40 backdrop-blur-[1px]">
+                        <button onClick={onBack} className="pointer-events-auto p-1 clickable-hotspot" aria-label="返回">
                             <i className="fa-solid fa-chevron-left text-[#c9a76b] text-base"></i>
                         </button>
 
                         <div className="absolute left-1/2 -translate-x-1/2 text-center drop-shadow-md pointer-events-none">
                             <h2 className="text-sm text-[#e0d5ba] tracking-[0.25em] font-bold">{poem.title}</h2>
-                            <p className="text-[9px] text-gray-300/80 font-light tracking-wider">— {poem.author} —</p>
                         </div>
 
                         <div className="w-6 h-6"></div>
@@ -2108,12 +2109,24 @@ onKeyDown={(e) => {
                                 label="詩句字幕" aria-label="詩句字幕"
                             />
 
-                            <div className="flex flex-col items-center justify-center">
-                                <div className="w-12 h-7 flex items-center justify-center rounded-full border border-[#c9a76b]/40 relative bg-[#1c1914] shadow-inner">
-                                    <span className="text-[#c9a76b] font-bold text-[10px] tracking-widest">{currentStep} / {poem.hotspots.length}</span>
-                                </div>
-                                <span className="text-[9px] mt-0.5 tracking-wider text-gray-400 font-medium">進度</span>
-                            </div>
+                            <button 
+    type="button"
+    aria-label="查看進度與全文"
+    className="flex flex-col items-center justify-center cursor-pointer group focus:outline-none"
+    onClick={() => {
+        setShowProgressModal(true);
+        triggerToast?.("開啟進度與篇章詳情");
+    }}
+>
+    <div className="w-12 h-7 flex items-center justify-center rounded-full border border-[#c9a76b]/40 relative bg-[#1c1914] shadow-inner group-hover:border-[#c9a76b] transition-colors">
+        <span className="text-[#c9a76b] font-bold text-[10px] tracking-widest">
+            {currentStep} / {poem.hotspots?.length || 0}
+        </span>
+    </div>
+    <span className="text-[9px] mt-0.5 tracking-wider text-gray-400 font-medium group-hover:text-[#c9a76b] transition-colors">
+        進度
+    </span>
+</button>
 
                             <InkRingButton 
                                 sfxType="click" aria-label="詩境語譯"
@@ -2137,7 +2150,7 @@ onKeyDown={(e) => {
 
                     {showInterpretation && (
                         <div 
-                            className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-fade-in pointer-events-auto"
+                            className="absolute inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-5 animate-fade-in pointer-events-auto"
                             onClick={() => setShowInterpretation(false)}
                         >
                             <div 
@@ -2199,6 +2212,167 @@ onKeyDown={(e) => {
                             </div>
                         </div>
                     )}
+{/* 進度與篇章全文 Modal */}
+{showProgressModal && (
+    <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in pointer-events-auto"
+        onClick={() => setShowProgressModal(false)}
+    >
+        <div 
+            className="bg-[#1c1914] border border-[#c9a76b]/40 rounded-xl w-full max-w-[280px] max-h-[80vh] flex flex-col shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.15)] overflow-hidden relative text-[#e6d7c3]"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+        >
+            {/* 邊角古典裝飾 */}
+            <div className="absolute inset-1 border border-[#c9a76b]/25 rounded-lg pointer-events-none"></div>
+            <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b] z-10 pointer-events-none"></div>
+            <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b] z-10 pointer-events-none"></div>
+            <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b] z-10 pointer-events-none"></div>
+            <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b] z-10 pointer-events-none"></div>
+
+            {/* 標題欄 */}
+            <div className="p-3 border-b border-[#c9a76b]/30 flex justify-between items-center bg-[#15120e] relative z-20">
+                <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-book-bookmark text-[#c9a76b] text-xs"></i>
+                    <h3 className="text-[#e0d5ba] font-bold text-xs tracking-wider">關卡進度與篇章</h3>
+                </div>
+                <button 
+                    type="button"
+                    onClick={() => setShowProgressModal(false)}
+                    className="text-gray-400 hover:text-white w-6 h-6 flex items-center justify-center transition-colors"
+                >
+                    <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            {/* 分頁 Tab 切換 */}
+            <div className="flex border-b border-[#c9a76b]/20 bg-[#191612] shrink-0 relative z-20">
+                <button
+                    type="button"
+                    className={`flex-1 py-2 text-xs font-bold transition-all relative ${
+                        progressTab === 'collected' 
+                            ? 'text-[#c9a76b] bg-[#221e18]' 
+                            : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                    onClick={() => setProgressTab('collected')}
+                >
+                    已解鎖語譯 ({currentStep}/{poem.hotspots?.length || 0})
+                    {progressTab === 'collected' && (
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c9a76b]"></span>
+                    )}
+                </button>
+                <button
+                    type="button"
+                    className={`flex-1 py-2 text-xs font-bold transition-all relative ${
+                        progressTab === 'full' 
+                            ? 'text-[#c9a76b] bg-[#221e18]' 
+                            : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                    onClick={() => setProgressTab('full')}
+                >
+                    篇章全文
+                    {progressTab === 'full' && (
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#c9a76b]"></span>
+                    )}
+                </button>
+            </div>
+
+            {/* 內容區域：套用 custom-gold-scrollbar */}
+            <div className="p-4 overflow-y-auto flex-1 custom-gold-scrollbar relative z-20">
+                {progressTab === 'collected' ? (
+                    /* Tab 1: 已完成光點的詩句與廣東話語譯 */
+                    <div className="space-y-5">
+                        {currentStep === 0 ? (
+                            <div className="text-center py-10 text-gray-500 text-xs tracking-widest leading-relaxed">
+                                尚未點擊任何光點<br/>快去探索畫面中的詩境吧！
+                            </div>
+                        ) : (
+                            poem.hotspots?.slice(0, currentStep).map((spot, idx) => {
+                                // 💡 相容單頁結構與 slides 多頁結構
+                                const firstSlide = spot.slides?.[0];
+                                const displayLabel = spot.label || spot.text || firstSlide?.text || firstSlide?.label || poem.title;
+                                const cantoneseLabelText = spot.cantoneseLabel || firstSlide?.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。";
+                                const cantoneseDescText = spot.cantoneseDesc || firstSlide?.cantoneseDesc || poem.cantoneseDesc;
+
+                                return (
+                                    <div key={spot.id || idx} className="space-y-2 border-b border-[#c9a76b]/20 pb-5 last:border-0 last:pb-0">
+                                        {/* 詩句標題 */}
+                                        <div className="text-center bg-[#1c1914] py-1.5 px-3 rounded border border-[#c9a76b]/20">
+                                            <span className="text-[#c9a76b] text-xs font-bold tracking-widest leading-relaxed">
+                                                第 {idx + 1} 句<br/>「 {displayLabel} 」
+                                            </span>
+                                        </div>
+
+                                        {/* 廣東話講緊乜 */}
+                                        <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
+                                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                                <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
+                                            </p>
+                                            <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
+                                                {cantoneseLabelText}
+                                            </p>
+                                        </div>
+
+                                        {/* 意象睇頭 (存在時渲染) */}
+                                        {cantoneseDescText && (
+                                            <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
+                                                <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                                    <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
+                                                </p>
+                                                <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
+                                                    {cantoneseDescText}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                ) : (
+                    /* Tab 2: 篇章全文與朗讀功能 */
+                    <div className="flex flex-col items-center py-1 space-y-4">
+                        <div className="text-center border-b border-[#c9a76b]/20 pb-3 w-full">
+                            <h4 className="text-sm font-bold text-[#c9a76b] tracking-[0.2em]">{poem.title}</h4>
+                            {poem.author && <p className="text-xs text-gray-400 mt-1 tracking-widest">{poem.author}</p>}
+                        </div>
+
+                        {/* 朗讀按鈕 */}
+                        {typeof readingPoem === 'function' && (
+                            <button
+                                type="button"
+                                onClick={() => readingPoem(poem)}
+                                className="flex items-center justify-center gap-2 w-full py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all"
+                            >
+                                <i className="fa-solid fa-volume-high"></i>
+                                朗讀篇章
+                            </button>
+                        )}
+
+                        {/* 全文呈現：支援陣列分段，並套用 Noto Serif TC */}
+                        <div 
+                            className="w-full leading-relaxed text-[13px] tracking-[0.15em] text-[#e0d5ba] space-y-5 py-2 text-center"
+                            style={{ fontFamily: "'Noto Serif TC', serif" }}
+                        >
+                            {Array.isArray(poem.fullText) ? (
+                                poem.fullText.map((paragraph, i) => (
+                                    <p key={i} className="whitespace-pre-line">
+                                        {paragraph}
+                                    </p>
+                                ))
+                            ) : (
+                                <p className="whitespace-pre-line">
+                                    {poem.fullText || poem.content}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    </div>
+)}
 
                     {showCompletion && (
                         <div className="absolute inset-0 bg-black/65 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
@@ -2233,7 +2407,7 @@ onKeyDown={(e) => {
 {/* 設定彈窗 Overlay (GamePlayArea 專用) */}
 {showGameSettings && (
     <div className="settings-overlay absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center animate-fade-in pointer-events-auto px-6">
-        <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative shadow-[0_0_20px_rgba(201,167,107,0.15)]">
+        <div className="bg-[#11100e] border border-[#4a3f2b] rounded-xl w-full max-w-xs p-5 relative bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-5 text-[#e0d5ba] shadow-[0_0_20px_rgba(201,167,107,0.15)]">
             <h2 className="text-base text-[#c9a76b] tracking-[0.2em] font-bold text-center mb-5 border-b border-[#2d281f] pb-3">系統設置</h2>
             
             <div className="space-y-4 mb-6 px-1" role="dialog" aria-modal="true">
