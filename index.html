@@ -860,14 +860,11 @@ const [activeTab, setActiveTab] = useState('game'); // 'game' | 'reading' | 'ach
     const [isLeavingLoading, setIsLeavingLoading] = useState(false); 
     const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
     const [currentPoemId, setCurrentPoemId] = useState(null);
-    const [homeTab, setHomeTab] = useState('game'); 
     const [readingPoem, setReadingPoem] = useState(null); 
-    const [showMenu, setShowMenu] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
     const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, bgmVolume: 100, sfx: true });
     const [confirmReset, setConfirmReset] = useState(false); 
     const [toastMessage, setToastMessage] = useState('');
-    const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'md');
+    const [fontSize, setFontSize] = useLocalStorage('shijing_font_size', 'sm');
     const timerRef = useRef(null); 
 const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
     // UI 預熱與預載狀態管理
@@ -965,6 +962,13 @@ useEffect(() => {
     if (tourState !== 'idle') {
         document.body.style.overflow = 'hidden';
         if (scrollContainerRef.current) scrollContainerRef.current.style.overflow = 'hidden';
+	// 2. 檢查滾動容器是否在頂部，若不在頂部則平滑滾動至頂部
+    if (scrollContainerRef.current && scrollContainerRef.current.scrollTop > 0) {
+        scrollContainerRef.current.scrollTo({
+            top: 0,
+            behavior: 'smooth' // 使用平滑滾動提升體驗
+        });
+    }
     } else {
         document.body.style.overflow = 'auto';
         if (scrollContainerRef.current) scrollContainerRef.current.style.overflow = 'auto';
@@ -999,45 +1003,42 @@ useEffect(() => {
         if (!soundManager) return;
         audioUnlocked = true; // 鎖定狀態
 
-        // 1. 解鎖 HTML5 Audio 權限，並將 MP3 作為「墊檔音樂」播放
-        const shouldPlayAmbient = !soundManager.bgmMuted && soundManager.userBgmVolume > 0 && !soundManager.isGameMode;
-        
+        const targetVol = soundManager.bgmMuted ? 0 : (soundManager.userBgmVolume || 100);
+        const shouldPlayAmbient = targetVol > 0 && !soundManager.isGameMode;
+
+        // 1. 解鎖 HTML5 Audio 權限 (風聲墊檔)
         if (soundManager.ambientWind) {
-            // 無論如何先播放以取得瀏覽器權限
             soundManager.ambientWind.play().then(() => {
                 if (shouldPlayAmbient) {
-                    // 如果允許播放，將音量設為0並開始淡入 (這裡假設你 SM 有提供對應方法)
-                    soundManager.ambientWind.volume = 0; 
-                    // 若無 fadeIn 方法，可自行補上漸增音量的邏輯，或直接賦予設定音量
-                    soundManager.ambientWind.volume = soundManager.userBgmVolume || 0.5; 
+                    // 交給 SoundManager 去處理合適的音量，而不是寫死
+                    soundManager.ambientWind.volume = (targetVol / 100) * 0.7; 
                     console.log("[Audio Debug] 🌬️ 已啟動風聲 MP3 進行墊檔...");
                 } else {
-                    // 如果被靜音或在遊戲中，則僅作「無聲解鎖」後立刻暫停
                     soundManager.ambientWind.pause();
                 }
             }).catch(e => console.warn("[Audio Debug] MP3 權限解鎖失敗:", e));
         }
 
-        // 2. 喚醒與檢查 YouTube 播放器
+        // 2. 喚醒 YouTube 播放器 (💡 修正核心區塊)
         if (player && window.ytPlayerReady && !window.ytError) {
             try {
                 const currentState = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
-                player.unMute();
+                
+                if (typeof player.unMute === 'function') player.unMute();
 
-                if (currentState === -1 || currentState === 5) {
-                    console.log("[Audio Debug] ⚠️ YouTube 卡在未開始狀態，執行【現場重建】...");
-                    if (typeof window.initOrResetYTPlayer === 'function') {
-                        window.initOrResetYTPlayer((success) => {
-                            if (success && window.SM) window.SM.updateActualVolume();
-                        });
-                    }
-                } else {
-                    // 嘗試強迫播放
-                    if (typeof player.playVideo === 'function') player.playVideo();
-                    if (window.SM) window.SM.updateActualVolume();
+                // 無論是 -1 (未開始), 5 (已就緒), 還是 2 (暫停)，都直接呼叫播放即可！
+                console.log(`[Audio Debug] ▶️ 首點觸發，嘗試播放 YouTube (當前狀態: ${currentState})`);
+                
+                if (typeof player.playVideo === 'function') {
+                    player.playVideo();
                 }
+                
+                // 讓 SoundManager 統一接管音量與狀態更新
+                if (window.SM) window.SM.updateActualVolume();
+
             } catch (e) {
-                console.warn("[Audio Debug] 檢查 YT 失敗，觸發重建:", e);
+                console.warn("[Audio Debug] 控制 YT 失敗，才觸發重建:", e);
+                // 只有在真正發生錯誤 (例如 API 壞掉拋出 Exception) 時才重建
                 if (typeof window.initOrResetYTPlayer === 'function') window.initOrResetYTPlayer();
             }
         } else {
@@ -1045,31 +1046,29 @@ useEffect(() => {
         }
 
         // 3. 無縫切換判定 (Timeout 機制)
-        // 延遲 1 秒後檢查 YT 是否成功發聲，以此決定 MP3 的去留
         setTimeout(() => {
             if (window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
                 const state = window.ytPlayer.getPlayerState();
                 
                 // State 1 = 播放中, 3 = 緩衝中
                 if (state === 1 || state === 3) {
-                    console.log("[Audio Debug] ✅ YT 成功接管播放，淡出 MP3 墊檔音樂");
+                    console.log("[Audio Debug] ✅ YT 成功接管播放，暫停 MP3 墊檔");
                     if (soundManager && soundManager.ambientWind) {
-                        // 執行淡出並暫停 (請替換為你 SM 實際的淡出方法)
                         soundManager.ambientWind.pause(); 
                     }
                 } else {
                     console.log("[Audio Debug] ⏳ YT 仍未就緒，保持 MP3 繼續墊檔");
-                    window.ytError = true; // 更新狀態，讓其他組件知道 YT 目前罷工
+                    window.ytError = true; 
                 }
             }
-        }, 1000);
+        }, 1500); // 建議稍微加長到 1.5 秒，給 YT 緩衝時間
 
-        // 4. 清理監聽器：成功執行一次後即可功成身退
+        // 4. 清理監聽器
         window.removeEventListener('click', handleGlobalInteraction);
         window.removeEventListener('touchstart', handleGlobalInteraction);
     };
 
-    // 掛載監聽器 (加入 { once: true } 作為雙重保險)
+    // 掛載監聽器 (加入 { once: true })
     window.addEventListener('click', handleGlobalInteraction, { once: true });
     window.addEventListener('touchstart', handleGlobalInteraction, { passive: true, once: true });
 
@@ -1125,7 +1124,7 @@ const unlockAudioContext = () => {
         }, 0);
 
         return () => clearTimeout(timer); // 清理定時器
-    }, [homeTab, showMenu, showSettings]);
+    }, [activeTab]);
 
 
 // 請確保有引入 useEffect
@@ -1370,50 +1369,60 @@ const handlePoemComplete = (id) => {
         setCurrentPage('home');
     };
 
-    const getCardFontClasses = () => {
-        if (fontSize === 'sm') return { title: 'text-xs', author: 'text-[9px]', info: 'text-[8px]' };
-        if (fontSize === 'lg') return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
+// 1. 卡片字體 (Card Fonts)
+const getCardFontClasses = () => {
+    if (fontSize === 'sm') {
+        // 原本的 md (中) -> 現在的「小」
         return { title: 'text-sm', author: 'text-[10px]', info: 'text-[9px]' };
-    };
+    }
+    if (fontSize === 'lg') {
+        // 全新加大的「大」
+        return { title: 'text-lg', author: 'text-sm', info: 'text-xs' };
+    }
+    // 預設 md：原本的 lg (大) -> 現在的「中」
+    return { title: 'text-base', author: 'text-xs', info: 'text-xs' };
+};
 
-    const getReadingFontClass = () => {
-        if (fontSize === 'sm') return 'text-sm leading-relaxed';
-        if (fontSize === 'lg') return 'text-lg md:text-xl leading-loose';
-        return 'text-base leading-relaxed'; 
-    };
+// 2. 閱讀區字體 (Reading Fonts)
+const getReadingFontClass = () => {
+    if (fontSize === 'sm') return 'text-base leading-relaxed'; // 原本的 md -> 現在的「小」
+    if (fontSize === 'lg') return 'text-xl md:text-2xl leading-loose'; // 全新加大的「大」
+    return 'text-lg md:text-xl leading-relaxed'; // 原本的 lg -> 現在的「中」
+};
 
-    const cardFonts = getCardFontClasses();
-
-    // 處理彈窗內的字體大小與行距
+// 3. 彈窗字體 (Info / FAQ Modal Fonts)
 const getInfoFontClasses = () => {
     if (fontSize === 'sm') {
+        // 原本的 md (中) -> 現在的「小」
         return { 
-            h4: 'text-xs', 
+            h4: 'text-sm', 
             q: 'text-xs', 
-            p: 'text-[11px] leading-relaxed tracking-wide', 
-            note: 'text-[10px]' 
+            p: 'text-xs leading-[1.8] tracking-wide', 
+            note: 'text-[11px]' 
         };
     }
     if (fontSize === 'lg') {
+        // 全新加大的「大」
         return { 
-            h4: 'text-base', 
-            q: 'text-sm', 
-            p: 'text-sm leading-loose tracking-wide', 
-            note: 'text-xs' 
+            h4: 'text-lg', 
+            q: 'text-base', 
+            p: 'text-base leading-loose tracking-wide', 
+            note: 'text-sm' 
         };
     }
-    // 預設 (md)
+    // 預設 md：原本的 lg (大) -> 現在的「中」
     return { 
-        h4: 'text-sm', 
-        q: 'text-xs', 
-        p: 'text-xs leading-[1.8] tracking-wide', // 使用 [1.8] 比例讓中文字閱讀更舒適
-        note: 'text-[11px]' 
+        h4: 'text-base', 
+        q: 'text-sm', 
+        p: 'text-sm leading-relaxed tracking-wide', 
+        note: 'text-xs' 
     };
 };
 
+const cardFonts = getCardFontClasses();
 const infoFonts = getInfoFontClasses();
 
-    // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換 homeTab 時按鈕與印章變大/閃爍）
+    // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換分頁時按鈕與印章變大/閃爍）
     const renderPreloadContainer = () => (
         <div className="invisible fixed -left-[9999px] -top-[9999px] w-[375px] h-[667px] pointer-events-none aria-hidden">
             <div className="space-y-3.5">
@@ -1501,7 +1510,7 @@ if (currentPage === 'start') {
             
             {/* 頂部 Header */}
             <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-                <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1">文學遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
+                <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1">詩境遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
                 <div className="text-[10px] text-gray-500 tracking-widest uppercase">
                     {activeTab === 'game' ? '探索篇章' : 
                  activeTab === 'reading' ? '典藏閱讀' : 
@@ -1525,7 +1534,7 @@ if (currentPage === 'start') {
             <button onClick={() => setShowTourMenu(false)} className="absolute top-2 right-2 text-gray-400 p-2"><i className="fa-solid fa-xmark"></i></button>
             <h3 className="text-[#c9a76b] font-bold tracking-widest mb-5">需要重溫教學嗎？</h3>
             <div className="space-y-3">
-                <button onClick={() => { setShowTourMenu(false); setHomeTab('game'); setTourState('home-step1'); }} className="w-full py-2 border border-[#c9a76b] bg-[#c9a76b]/10 text-[#e0d5ba] rounded tracking-widest text-sm clickable-hotspot">
+                <button onClick={() => { setShowTourMenu(false); setActiveTab('game'); setTourState('home-step1'); }} className="w-full py-2 border border-[#c9a76b] bg-[#c9a76b]/10 text-[#e0d5ba] rounded tracking-widest text-sm clickable-hotspot">
                     頁面導覽
                 </button>
                 <button onClick={() => { setShowTourMenu(false); setTourState('game-tour'); openPoem('jianjia'); }} className="w-full py-2 border border-[#c9a76b] bg-[#c9a76b]/10 text-[#e0d5ba] rounded tracking-widest text-sm clickable-hotspot">
@@ -1539,7 +1548,7 @@ if (currentPage === 'start') {
             {/* 🌟 唯一掌控滾動與捲軸的外層容器 */}            <div 
                 ref={scrollContainerRef} 
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto px-6 py-4 relative z-10 custom-gold-scrollbar"
+                className="flex-1 overflow-y-auto px-6 py-4 relative z-10 scrollbar-hide"
             >
 {/* 新手教程：全局遮罩與提示文字 */}
 {/* 🌟 教學遮罩區塊 */}
@@ -1961,7 +1970,7 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
             <div className="pt-2">
                 <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span>
-                    <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span>
+                    <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '標準' : fontSize === 'lg' ? '大' : '中'}</span>
                 </div>
                 <div className="flex gap-2.5">
                     {['sm', 'md', 'lg'].map(sz => (
@@ -1979,7 +1988,7 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
                 </div>
             </div>
 
-            {/* 重置與關閉按鈕 */}
+{/* 重置與關閉按鈕 */}
             <div className="flex flex-col gap-3 mt-4 border-t border-[#2d281f] pt-4">
                 {!confirmReset ? (
                     <button 
@@ -1993,7 +2002,15 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
                     </button>
                 ) : (
                     <div className="flex gap-2">
-                        <button className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold clickable-hotspot" onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); setConfirmReset(false); setShowSettings(false); triggerToast("🔄 已重置"); }}>確定重置</button>
+                        <button 
+    className="flex-1 py-1 rounded text-[10px] bg-red-800 text-white font-bold clickable-hotspot" 
+    onClick={() => {
+        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
+        setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); 
+        setHasSeenTutorial(false); // 補上這行：將教程狀態設為 false，並同步至 localStorage
+        setConfirmReset(false); 
+        setActiveTab('game'); 
+        triggerToast("🔄 已重置");}}>確定重置</button>
                         <button className="flex-1 py-1 rounded text-[10px] bg-gray-800 text-gray-300 clickable-hotspot" onClick={() => {
                             if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                             setConfirmReset(false);
@@ -2001,7 +2018,7 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
                     </div>
                 )}
                 <button className="ink-button w-full py-2 rounded tracking-widest text-xs clickable-hotspot font-medium" aria-label="關閉"
-                    onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setShowSettings(false);}}
+                    onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setActiveTab('game');}}
                 >
                     關閉
                 </button>
@@ -2109,7 +2126,7 @@ onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
                     <p className={`${infoFonts.p} text-[#d1c5a5]`}>
                         創作者於高中時就讀中國文學，希望可以有創意互動方法幫助背誦篇章。在創作了幾個圖像遊戲之後研發創作這個文學遊戲，歡迎各位選修 DSE 中國文學的學生及對文學遊戲有興趣的用家使用及留下心得。</p>
 <p className={`${infoFonts.p} text-[#d1c5a5] mt-1`}>
-【貼地版】那些年背篇章還有背其他科目的內容背到懷疑人生，才會希望有一個「能邊玩邊背」的遊戲！這絕對是血與淚換的成品（淚）
+【貼地版】那些年背篇章還有背其他科目的內容背到懷疑人生，才會希望有一個「能邊玩邊背」的遊戲！這絕對是用血與淚釀造的成品 ಥ_ಥ
                     </p>
                     <div className={`mt-4 p-3 bg-[#0a0a09] border border-[#2d281f] rounded ${infoFonts.note} text-gray-400 leading-relaxed`}>
                         <span className="text-[#c9a76b] font-bold">備註：</span> 遊戲中的語譯及注釋僅供學習與理解參考，實際應考請依香港考評局（HKEAA）及學校教學指引為準。
@@ -3002,7 +3019,7 @@ aria-label={audioSettings.sfx ? "關閉環境音效" : "開啟環境音效"}
             <div className="pt-2">
                 <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[#e0d5ba] tracking-widest text-xs">字體大小</span>
-                    <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '精緻小' : fontSize === 'lg' ? '醒目大' : '標準中'}</span>
+                    <span className="text-[#c9a76b] font-bold text-[10px] uppercase">{fontSize === 'sm' ? '標準' : fontSize === 'lg' ? '大' : '中'}</span>
                 </div>
                 <div className="flex gap-2.5">
                     {['sm', 'md', 'lg'].map(sz => (
