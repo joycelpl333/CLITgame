@@ -381,7 +381,15 @@ window.initOrResetYTPlayer = function(callback) {
     if (!ytContainer) {
         ytContainer = document.createElement('div');
         ytContainer.id = 'yt-player';
-        ytContainer.style.display = 'none';
+
+	// ✅ 改成這樣：假裝顯示，但推到螢幕外，且設為透明無互動
+    ytContainer.style.position = 'absolute';
+    ytContainer.style.top = '-9999px';
+    ytContainer.style.left = '-9999px';
+    ytContainer.style.opacity = '0.01'; // 給極小的透明度，不要設 0
+    ytContainer.style.pointerEvents = 'none';
+    ytContainer.style.zIndex = '-1';
+
         document.body.appendChild(ytContainer);
     }
 
@@ -392,10 +400,11 @@ window.initOrResetYTPlayer = function(callback) {
     const createYTInstance = () => {
         try {
             window.ytPlayer = new YT.Player('yt-player', {
-                height: '0',
-                width: '0',
+                height: '10',
+                width: '10',
                 videoId: '11pvOw2DZ58',
                 playerVars: {
+'playsinline': 1, // 💡 手機端必加！強制在網頁內播放，避免跳出全螢幕播放器
                     'autoplay': 0, // 💡 刷新頁面時絕不預設 autoplay，避免被瀏覽器直接封鎖死
                     'loop': 1,
                     'playlist': '11pvOw2DZ58',
@@ -1702,7 +1711,7 @@ onKeyDown={(e) => {
                                                         <div className="flex items-center gap-2">
                                                             <h4 className={`${cardFonts.title} text-[#e0d5ba] font-bold tracking-wider mb-0.5`}>{poem.title}</h4>
                                                             {isExplored && (
-                                                                <span className="text-[9px] text-[#c9a76b] border border-[#c9a76b]/40 bg-[#c9a76b]/10 px-1.5 py-0.2 rounded font-medium">已通關</span>
+                                                                <span className="text-[9px] text-[#c9a76b] border border-[#c9a76b]/40 bg-[#c9a76b]/10 px-1.5 py-0.2 rounded font-medium">已解鎖</span>
                                                             )}
                                                         </div>
                                                         <p className={`${cardFonts.author} text-gray-500`}>{poem.author}</p>
