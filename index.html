@@ -279,9 +279,83 @@ will-change: mask-image;
     <div id="root"></div>
     <script src="poems.js"></script>
     <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;" tabIndex="-1" aria-hidden="true"></div>
-    
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
+
+function useSpeech() {
+    // 朗讀播放器狀態[cite: 4]
+    const [playbackState, setPlaybackState] = useState('stopped'); // 'stopped' | 'playing' | 'paused'
+    const [currentUtterance, setCurrentUtterance] = useState(null);
+
+    // 廣東話朗讀文字優化與破音字校正[cite: 4]
+    const formatCantoneseText = useCallback((rawText) => {
+        if (!rawText) return '';
+        let text = rawText;
+        text = text.replace(/[\r\n]+/g, '，');
+        text = text.replace(/[─—…]+/g, '，');
+        
+        const cantoneseFixMap = {
+            '宛':'苑', '鋏':'夾','被':'披','吾':'吳','虯':'求', '驂':'攙', '欸':'哀','朝':'招','漵':'敘','猨':'猿','狖':'穴', '重':'從', '薄':'逼', '易':'亦', '好':'浩', '傺':'祭', '觳':'酷', '度':'踱','為':'維','長': '掌', '':'', '':'', '':'', '':'', '':'', '':'',
+'女':'汝', '還': '環', '見': '現', '假': '借', '樂': '洛', 
+        };
+        Object.keys(cantoneseFixMap).forEach((key) => {
+            text = text.replaceAll(key, cantoneseFixMap[key]);
+        });
+        return text;
+    }, []);
+
+    // 播放功能
+    const playSpeech = useCallback((text) => {
+        if (!window.speechSynthesis) return;
+
+        // 如果目前是暫停狀態，則繼續播放
+        if (playbackState === 'paused') {
+            window.speechSynthesis.resume();
+            setPlaybackState('playing');
+            return;
+        }
+
+        // 停止之前的語音
+        window.speechSynthesis.cancel();
+
+        const formattedText = formatCantoneseText(text);
+        const utterance = new SpeechSynthesisUtterance(formattedText);
+        utterance.lang = 'zh-HK'; // 設定為廣東話
+        utterance.rate = 0.9; // 語速稍微放慢，更有詩詞韻味
+
+        utterance.onstart = () => setPlaybackState('playing');
+        utterance.onend = () => setPlaybackState('stopped');
+        utterance.onerror = () => setPlaybackState('stopped');
+
+        setCurrentUtterance(utterance);
+        window.speechSynthesis.speak(utterance);
+    }, [playbackState, formatCantoneseText]);
+
+    // 暫停功能
+    const pauseSpeech = useCallback(() => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.pause();
+            setPlaybackState('paused');
+        }
+    }, []);
+
+    // 停止功能
+    const stopSpeech = useCallback(() => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            setPlaybackState('stopped');
+        }
+    }, []);
+
+    // 當元件卸載時，自動停止語音
+    useEffect(() => {
+        return () => {
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        };
+    }, []);
+
+    return { playbackState, playSpeech, pauseSpeech, stopSpeech };
+}
 
 const preloadAudio = (src) => {
     return new Promise((resolve) => {
@@ -868,6 +942,10 @@ const [activeTab, setActiveTab] = useState('game'); // 'game' | 'reading' | 'ach
     const [isLeavingStart, setIsLeavingStart] = useState(false); 
     const [isLeavingLoading, setIsLeavingLoading] = useState(false); 
     const [unlockedPoems, setUnlockedPoems] = useLocalStorage('shijing_unlocked_poems_v4', ['jianjia', 'shejiang', 'qihuan']);
+// 👇 新增：記錄「當前」已真正挑戰過關的篇章
+const [completedPoems, setCompletedPoems] = useLocalStorage('shijing_completed_poems_v4', []);
+// 👇 新增：記錄「歷史」曾經過關的印章（重置時不清除，用於保留半透明印章）
+const [historicalStamps, setHistoricalStamps] = useLocalStorage('shijing_historical_stamps_v4', []);
     const [currentPoemId, setCurrentPoemId] = useState(null);
     const [readingPoem, setReadingPoem] = useState(null); 
     const [audioSettings, setAudioSettings] = useLocalStorage('shijing_audio_settings', { bgm: true, bgmVolume: 100, sfx: true });
@@ -882,6 +960,12 @@ const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
     const isTouchOrMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const [showInfoModal, setShowInfoModal] = useState(false);
 const scrollContainerRef = useRef(null);
+const [showInterpretation, setShowInterpretation] = useState(false);
+const { playbackState, playSpeech, pauseSpeech, stopSpeech } = useSpeech();
+// 當關閉閱讀 Modal 時，自動停止語音[cite: 4]
+    useEffect(() => {
+        if (!readingPoem) stopSpeech();
+    }, [readingPoem, stopSpeech]);
 
 // 內部滾動處理函式（不會影響外層 game-frame）
 const scrollToSection = (sectionId) => {
@@ -1367,6 +1451,14 @@ const handlePoemComplete = (id) => {
             window.SM.exitGameMode();
         }
 
+	// 👇 新增：記錄當前輪次與歷史的過關紀錄
+    if (!completedPoems.includes(id)) {
+        setCompletedPoems(prev => [...prev, id]);
+    }
+    if (!historicalStamps.includes(id)) {
+        setHistoricalStamps(prev => [...prev, id]);
+    }
+
         const currentIndex = POEMS.findIndex(p => p.id === id);
         if (currentIndex >= 0 && currentIndex < POEMS.length - 1) {
             const nextId = POEMS[currentIndex + 1].id;
@@ -1598,7 +1690,7 @@ if (currentPage === 'start') {
                         <div className="space-y-3.5 pb-10 fade-mask-list">
     {POEMS.map((poem, idx) => {
         const isUnlocked = unlockedPoems.includes(poem.id);
-        const isCompleted = isUnlocked && poem.hotspots.length > 0;
+        const isCompleted = completedPoems.includes(poem.id);
         
         // 🌟 獨立定義是否為當前教學目標 (Home Step 5 且為第一個關卡)
         const isTarget = tourState === 'home-step5' && idx === 0;
@@ -1732,13 +1824,13 @@ onKeyDown={(e) => {
                                             <i className="fa-solid fa-award text-[#c9a76b] text-3xl"></i>
                                         </div>
                                         <h3 className="text-sm text-[#e0d5ba] tracking-widest font-bold">雅士集章</h3>
-                                        <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{unlockedPoems.length * 10} 點</p>
+                                        <p className="text-[10px] text-[#c9a76b]/70 tracking-wider mt-1">底蘊值：{completedPoems.length * 10} 點</p>
                                     </div>
                                     
                                     <div className="pt-4 border-t border-[#2d281f] mt-6">
                                         <div className="flex justify-between items-end mb-3">
                                             <h4 className="text-xs text-[#c9a76b] font-bold border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">文創集章冊</h4>
-                                            <span className="text-[10px] text-gray-500">已集得 {unlockedPoems.length} / {POEMS.length} 印</span>
+                                            <span className="text-[10px] text-gray-500">已集得 {completedPoems.length} / {POEMS.length} 印</span>
                                         </div>
                                         <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">
                                             完成篇章探索挑戰，即可獲得該篇之專屬古典篆印。<br/>
@@ -1747,7 +1839,15 @@ onKeyDown={(e) => {
 
                                         <div className="grid grid-cols-3 gap-3">
                                             {POEMS.map((poem, idx) => {
-                                                const isUnlocked = unlockedPoems.includes(poem.id);
+                                                // 👇 重新定義各項狀態
+    const isCompleted = completedPoems.includes(poem.id); // 真正過關 (顯示清晰印章)
+    const isHistoricallyCompleted = historicalStamps.includes(poem.id); // 歷史曾過關
+    const isDefaultPlayable = ['jianjia', 'shejiang', 'qihuan'].includes(poem.id); // 首3篇
+    
+    // 👇 判斷是否為「半透明預示」：尚未過關，但屬於前3篇或曾經解鎖過
+    const isPreview = !isCompleted && (isDefaultPlayable || isHistoricallyCompleted);
+    // 👇 是否要顯示印章輪廓 (包含清晰與半透明)
+    const showStamp = isCompleted || isPreview;
                                                 const stampChar = poem.stampChar || poem.title.charAt(0);
                                                 const stampName = poem.stampName || `${poem.title.slice(0, 2)}印`;
                                                 
@@ -1778,7 +1878,7 @@ onKeyDown={(e) => {
                                 }
                             }}
                                                         className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors duration-200 relative overflow-hidden ${
-                                                            isUnlocked 
+                                                            isCompleted 
                                                                 ? 'bg-[#161310] border-[#3a3224] shadow-md group hover:border-[#c9a76b]/50' 
                                                                 : 'bg-[#100f0d]/40 border-[#1a1714] opacity-35'
                                                         }`}
@@ -1793,8 +1893,8 @@ onKeyDown={(e) => {
                                                             </defs>
                                                         </svg>
 
-                                                        <div className={`relative w-12 h-12 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isUnlocked ? 'scale-100 group-hover:scale-105' : 'scale-90'}`}>
-                                                            {isUnlocked ? (
+                                                        <div className={`relative w-12 h-12 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isCompleted ? 'scale-100 group-hover:scale-105' : 'scale-90'}`}>
+                                                            {showStamp ? (
                                                                 poem.sealImgUrl ? (
                                                                     <img 
                                                                         src={poem.sealImgUrl} 
@@ -1839,10 +1939,8 @@ onKeyDown={(e) => {
 )}
 
 {shapeType === 'gourd' && (() => {
-    // 從已有變數 stampName 中去掉「印」字並取前兩個字 (例如 "南鄉印" -> "南鄉")
-    const gourdChars = stampName.replace('印', '').slice(0, 2);
-    const topChar = gourdChars[0] || stampChar;
-    const bottomChar = gourdChars[1] || '';
+const topChar = poem.stampChar?.charAt(0) || stampName.replace('印', '').charAt(0) || '';
+    const bottomChar = poem.stampChar?.charAt(1) || stampName.replace('印', '').charAt(1) || '';
 
     return (
         <div className="relative w-10 h-[52px] flex items-center justify-center">
@@ -1909,7 +2007,7 @@ onKeyDown={(e) => {
                                                         </div>
 
                                                         <div className="text-center mt-2 w-full">
-                                                            <span className={`block text-[10px] font-medium tracking-wider truncate ${isUnlocked ? 'text-[#e0d5ba]' : 'text-gray-600'}`}>
+                                                            <span className={`block text-[10px] font-medium tracking-wider truncate ${isCompleted ? 'text-[#e0d5ba]' : 'text-gray-600'}`}>
                                                                 {stampName}
                                                             </span>
                                                         </div>
@@ -2016,6 +2114,8 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
     onClick={() => {
         if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
         setUnlockedPoems(['jianjia', 'shejiang', 'qihuan']); 
+// 👇 新增：重置時只清空目前進度，不清除 historicalStamps
+        setCompletedPoems([]);
         setHasSeenTutorial(false); // 補上這行：將教程狀態設為 false，並同步至 localStorage
         setConfirmReset(false); 
         setActiveTab('game'); 
@@ -2048,49 +2148,243 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
 
 
 {readingPoem && (
-                            <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
-                                <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
-                                    <button id="reading-back-btn"
-onClick={() => {if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); setReadingPoem(null);}} className="p-2 clickable-hotspot" aria-label="返回典藏列表">
-                                        <i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i>
-                                    </button>
-                                    
-                                    <div className="text-center">
-                                        <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2>
-                                        <p className="text-[10px] text-gray-500">{readingPoem.author}</p>
-                                    </div>
+    <div className="absolute inset-0 z-50 bg-[#0d0c0a] flex flex-col animate-fade-in overflow-hidden">
+        {/* === 頂部 Header === */}
+        {/* 💡 修改：使用 flex-1 讓左右兩側佔據等寬空間，確保中間標題絕對置中 */}
+        <div className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] bg-[#0d0c0a]/95 backdrop-blur-md">
+            
+            {/* 左側：返回按鈕 (加上 flex-1 與 justify-start) */}
+            <div className="flex-1 flex justify-start">
+                <button 
+                    id="reading-back-btn"
+                    onClick={() => {
+                        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
+                        setReadingPoem(null);
+                    }} 
+                    className="p-2 clickable-hotspot" 
+                    aria-label="返回典藏列表"
+                >
+                    <i className="fa-solid fa-chevron-left text-[#c9a76b] text-lg"></i>
+                </button>
+            </div>
+            
+            {/* 中間：標題 (加上 flex-none 確保自身大小不被壓縮) */}
+            <div className="flex-none text-center">
+                <h2 className="text-sm text-[#e0d5ba] tracking-[0.2em] font-bold">{readingPoem.title}</h2>
+                <p className="text-[10px] text-gray-500">{readingPoem.author}</p>
+            </div>
 
-                                    {/* 右上角複製按鈕 */}
-                                    <button 
-    onClick={() => {
-        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
-        handleCopyPoem(readingPoem);
-    }}
-    className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#c9a76b] focus-visible:outline-none rounded"
-    title="複製全文"
->
-    <i className="fa-regular fa-copy text-base"></i>
-</button>
-                                </div>
+            {/* 右側：按鈕群組 (加上 flex-1 與 justify-end) */}
+            <div className="flex-1 flex justify-end items-center gap-1">
+                {/* 廣東話解讀按鈕 */}
+                <button 
+                    onClick={() => {
+                        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
+                        setShowInterpretation(true);
+                    }}
+                    className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center rounded"
+                    title="詩境廣東話解讀"
+                    aria-label="打開詩境廣東話解讀"
+                >
+                    <i className="fa-solid fa-book-open text-base"></i>
+                </button>
 
-                                <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10 scroll-smooth">
-                                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
-                                    
-                                    {/* 【修改】加上 fullText select-text 允許手動劃選文字 */}
-                                    <div className="relative z-10 max-w-md mx-auto space-y-5 text-center mt-6 fullText select-text">
-                                        {readingPoem.fullText && readingPoem.fullText.length > 0 ? (
-                                            readingPoem.fullText.map((line, idx) => (
-                                                <p key={idx} className={`whitespace-pre-line ${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>
-                                                    {line}
-                                                </p>
-                                            ))
-                                        ) : (
-                                            <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                {/* 複製按鈕 */}
+                <button 
+                    onClick={() => {
+                        if (window.SM || typeof SM !== 'undefined') SM.playSFX('click'); 
+                        handleCopyPoem(readingPoem);
+                    }}
+                    className="p-2 text-[#c9a76b] hover:text-[#f5d38a] active:scale-90 transition-all clickable-hotspot flex items-center justify-center focus-visible:ring-2 focus-visible:ring-[#c9a76b] focus-visible:outline-none rounded"
+                    title="複製全文"
+                >
+                    <i className="fa-regular fa-copy text-base"></i>
+                </button>
+            </div>
+        </div>
+
+        {/* === 中間：詩詞全文閱讀區 === */}
+        <div className="flex-1 overflow-y-auto p-10 relative scrollbar-hide mb-10 scroll-smooth">
+            <div className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: `url(${readingPoem.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
+            
+            <div className="relative z-10 max-w-md mx-auto space-y-5 text-center fullText select-text">
+
+                {/* 詩詞內文循環 */}
+                {readingPoem.fullText && readingPoem.fullText.length > 0 ? (
+                    readingPoem.fullText.map((line, idx) => (
+                        <p key={idx} className={`whitespace-pre-line ${getReadingFontClass()} text-[#e0d5ba] tracking-widest drop-shadow-md font-medium`}>
+                            {line}
+                        </p>
+                    ))
+                ) : (
+                    <p className="text-gray-500 tracking-widest text-xs">全文編撰中...</p>
+                )}
+            </div>
+        </div>
+
+{/* 🌟 把原本完整的朗讀/暫停按鈕列置於此處 */}
+<div className="absolute bottom-6 right-1 z-30 flex gap-2 pointer-events-none transition-all duration-300 opacity-30 hover:opacity-100">
+    
+    {/* 恢復按鈕本身的點擊事件 (pointer-events-auto)，並加上質感底色與邊框 */}
+    <div className="pointer-events-auto flex gap-2 bg-[#0d0c0a]/90 p-1.5 rounded-lg border border-[#c9a76b]/40 backdrop-blur-sm shadow-lg">
+        {playbackState !== 'playing' ? (
+            <button
+                type="button"
+                onClick={() => {
+                    const rawText = Array.isArray(readingPoem.fullText) 
+                        ? readingPoem.fullText.map(line => {
+                // 將引號替換成逗號或句號，讓瀏覽器懂得停頓；或在句尾加上逗號
+                return line
+                    .replace(/[「『]/g, '，') // 將開頭引號改為停頓
+                    .replace(/[」』]/g, '。') // 將結尾引號改為句號
+                    ;
+              }).join('，') 
+            : (readingPoem.fullText || readingPoem.content)
+                .replace(/[「『]/g, '，')
+                .replace(/[」』]/g, '。');
+
+        // 2. 朗讀優化後的文字
+        playSpeech(`${readingPoem.title}。${rawText}`);
+                }}
+                className="flex items-center justify-center px-3 py-1.5 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all"
+            >
+                <i className="fa-solid fa-play mr-1.5"></i>
+                {playbackState === 'paused' ? '繼續朗讀' : '朗讀篇章'}
+            </button>
+        ) : (
+            <button
+                type="button"
+                onClick={pauseSpeech}
+                className="flex items-center justify-center px-3 py-1.5 rounded border border-[#f5d38a] bg-[#f5d38a]/20 text-[#f5d38a] animate-pulse text-xs font-bold tracking-[0.2em] active:scale-95 transition-all"
+            >
+                <i className="fa-solid fa-pause mr-1.5"></i>
+                暫停
+            </button>
+        )}
+        
+        {playbackState !== 'stopped' && (
+            <button
+                type="button"
+                onClick={stopSpeech}
+                className="w-9 flex items-center justify-center rounded border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 active:scale-95 transition-all"
+                title="停止"
+            >
+                <i className="fa-solid fa-stop text-xs"></i>
+            </button>
+        )}
+    </div>
+</div>
+
+        {/* === 彈出式 Modal：廣東話解讀 === */}
+        {showInterpretation && (
+            <div 
+                className="absolute inset-0 bg-black/70 backdrop-blur-md z-[60] flex items-center justify-center p-5 animate-fade-in pointer-events-auto"
+                onClick={() => setShowInterpretation(false)}
+            >
+                <div 
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="詩境廣東話解讀" 
+                    className="relative w-full max-w-[290px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-5 text-[#e0d5ba] shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.15)]"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {/* 角落裝飾線 */}
+                    <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
+                    <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
+                    <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
+                    <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
+                    <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
+
+                    {/* Modal Header */}
+                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-[#c9a76b]/30">
+                        <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-book-open text-[#c9a76b] text-xs"></i>
+                            <h3 className="text-xs font-bold tracking-[0.2em] text-[#e0d5ba]">詩境廣東話解讀</h3>
+                        </div>
+                        <button onClick={() => setShowInterpretation(false)} className="text-gray-400 hover:text-white p-1">
+                            <i className="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+
+                    {/* Modal Body：列表滾動區 */}
+<div className="space-y-4 max-h-[55vh] overflow-y-auto pr-2 custom-gold-scrollbar">
+    
+    {(readingPoem.spots || readingPoem.hotspots || []).map((spot, idx) => {
+        const displayLabel = spot.label;
+        const cantoneseLabelText = spot.cantoneseLabel;
+        const cantoneseDescText = spot.cantoneseDesc;
+
+        if (!displayLabel && !cantoneseLabelText) return null;
+
+        return (
+            // 💡 整個區域變成單一卡片設計
+            <div key={spot.id || idx} className="bg-[#1c1914] rounded border border-[#c9a76b]/20 overflow-hidden shadow-sm">
+                
+                {/* 卡片標題區：詩句 */}
+                {displayLabel && (
+                    <div className="bg-[#c9a76b]/10 py-2 px-3 border-b border-[#c9a76b]/20 text-center">
+                        <span className="text-[#c9a76b] text-xs font-bold tracking-widest leading-relaxed">
+                            {displayLabel}
+                        </span>
+                    </div>
+                )}
+
+                {/* 卡片內容區：解讀 */}
+                <div className="p-3 space-y-3">
+                    {/* 廣東話講緊乜 */}
+                    {cantoneseLabelText && (
+                        <div>
+                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
+                            </p>
+                            <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
+                                {cantoneseLabelText}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* 分隔線 (如果兩個解讀都有才顯示) */}
+                    {cantoneseLabelText && cantoneseDescText && (
+                        <div className="border-t border-dashed border-[#c9a76b]/20"></div>
+                    )}
+
+                    {/* 意象睇頭 */}
+                    {cantoneseDescText && (
+                        <div>
+                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
+                            </p>
+                            <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
+                                {cantoneseDescText}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    })}
+
+    {/* 無資料提示 */}
+    {(!(readingPoem.spots || readingPoem.hotspots)?.length) && (
+        <p className="text-gray-400 text-xs text-center py-4 tracking-widest">
+            本篇解讀陸續增潤中...
+        </p>
+    )}
+</div>
+
+                    {/* Modal Footer 按鈕 */}
+                    <button 
+                        onClick={() => setShowInterpretation(false)} 
+                        className="mt-4 w-full py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all clickable-hotspot" 
+                        aria-label="我知道啦"
+                    >
+                        我知道啦
+                    </button>
+                </div>
+            </div>
+        )}
+    </div>
+)}
 
 {/* 🌟 資訊與 FAQ 彈窗 */}
 {showInfoModal && (
@@ -2378,7 +2672,13 @@ return (
     const [showHotspotHints, setShowHotspotHints] = useState(false); 
     const [showInterpretation, setShowInterpretation] = useState(false);
     const [isEntryGlowing, setIsEntryGlowing] = useState(true);
-    
+    const [readingPoem, setReadingPoem] = useState(null); 
+    const { playbackState, playSpeech, pauseSpeech, stopSpeech } = useSpeech();
+// 當關閉閱讀 Modal 時，自動停止語音[cite: 4]
+    useEffect(() => {
+        if (!readingPoem) stopSpeech();
+    }, [readingPoem, stopSpeech]);
+
     // 🌟 新增：遊戲內導覽狀態
     const [gameTourStep, setGameTourStep] = useState(tourState === 'game-tour' ? 1 : 0);
 
@@ -2621,7 +2921,7 @@ return (
         {currentSpot.label}
     </p>
 ) : (
-    <p className="text-[10px] text-gray-300/80 tracking-widest italic bg-black/50 backdrop-blur-[2px] py-1 px-4 rounded-full inline-block border border-white/10">
+    <p className="text-[10px] text-gray-300/80 tracking-widest italic bg-black/10 backdrop-blur-[2px] py-1 px-4 rounded-full inline-block border border-white/10">
         〔 請於畫面中點選對應意象 〕
     </p>
 )}
@@ -2739,33 +3039,51 @@ return (
                                     </button>
                                 </div>
 
-                                <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1 custom-gold-scrollbar">
-                                    <div className="text-center bg-[#1c1914] py-1.5 px-3 rounded border border-[#c9a76b]/20">
-                                        <span className="text-xs text-[#c9a76b] font-bold tracking-widest">
-                                            「 {currentSpot.label || poem.title} 」
-                                        </span>
-                                    </div>
+                                <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1 custom-gold-scrollbar">
+    {/* 💡 統一卡片外框設計 */}
+    <div className="bg-[#1c1914] rounded border border-[#c9a76b]/20 overflow-hidden shadow-sm">
+        
+        {/* 卡片標題區：詩句 */}
+        <div className="bg-[#c9a76b]/10 py-2 px-3 border-b border-[#c9a76b]/20 text-center">
+            <span className="text-xs text-[#c9a76b] font-bold tracking-widest leading-relaxed">
+                「 {currentSpot.label || poem.title} 」
+            </span>
+        </div>
 
-                                    <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
-                                        <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                            <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
-                                        </p>
-                                        <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
-                                            {currentSpot.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。"}
-                                        </p>
-                                    </div>
+        {/* 卡片內容區：解讀 */}
+        <div className="p-3 space-y-3">
+            
+            {/* 廣東話講緊乜 (因為有預設文字，所以一定會顯示) */}
+            <div>
+                <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                    <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
+                </p>
+                <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
+                    {currentSpot.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。"}
+                </p>
+            </div>
 
-                                    {(currentSpot.cantoneseDesc || poem.cantoneseDesc) && (
-                                        <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
-                                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                                <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
-                                            </p>
-                                            <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
-                                                {currentSpot.cantoneseDesc || poem.cantoneseDesc}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
+            {/* 當「意象睇頭」有資料時，才渲染分隔線與意象內容 */}
+            {(currentSpot.cantoneseDesc || poem.cantoneseDesc) && (
+                <>
+                    {/* 虛線分隔線 */}
+                    <div className="border-t border-dashed border-[#c9a76b]/20"></div>
+                    
+                    {/* 意象睇頭 */}
+                    <div>
+                        <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                            <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
+                        </p>
+                        <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
+                            {currentSpot.cantoneseDesc || poem.cantoneseDesc}
+                        </p>
+                    </div>
+                </>
+            )}
+            
+        </div>
+    </div>
+</div>
 
                                 <button 
                                     onClick={() => setShowInterpretation(false)} 
@@ -2780,7 +3098,10 @@ return (
 {showProgressModal && (
     <div 
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in pointer-events-auto"
-        onClick={() => setShowProgressModal(false)}
+        onClick={() => {
+            setShowProgressModal(false);
+            stopSpeech(); // 關閉 Modal 時自動停止語音
+        }}
     >
         <div 
             className="bg-[#1c1914] border border-[#c9a76b]/40 rounded-xl w-full max-w-[280px] max-h-[80vh] flex flex-col shadow-[0_0_25px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.15)] overflow-hidden relative text-[#e6d7c3]"
@@ -2803,7 +3124,10 @@ return (
                 </div>
                 <button 
                     type="button"
-                    onClick={() => setShowProgressModal(false)}
+                    onClick={() => {
+                        setShowProgressModal(false);
+                        stopSpeech(); // 關閉時停止語音
+                    }}
                     className="text-gray-400 hover:text-white w-6 h-6 flex items-center justify-center transition-colors"
                 >
                     <i className="fa-solid fa-xmark text-sm"></i>
@@ -2842,53 +3166,52 @@ return (
                 </button>
             </div>
 
-            {/* 內容區域：套用 custom-gold-scrollbar */}
+            {/* 內容區域 */}
             <div className="p-4 overflow-y-auto flex-1 custom-gold-scrollbar relative z-20">
                 {progressTab === 'collected' ? (
                     /* Tab 1: 已完成光點的詩句與廣東話語譯 */
-                    <div className="space-y-5">
+                    <div className="space-y-4">
                         {currentStep === 0 ? (
                             <div className="text-center py-10 text-gray-500 text-xs tracking-widest leading-relaxed">
                                 尚未點擊任何光點<br/>快去探索畫面中的詩境吧！
                             </div>
                         ) : (
                             poem.hotspots?.slice(0, currentStep).map((spot, idx) => {
-                                // 💡 相容單頁結構與 slides 多頁結構
                                 const firstSlide = spot.slides?.[0];
                                 const displayLabel = spot.label || spot.text || firstSlide?.text || firstSlide?.label || poem.title;
                                 const cantoneseLabelText = spot.cantoneseLabel || firstSlide?.cantoneseLabel || poem.cantoneseTranslation || "呢句詩描述緊當前畫面嘅自然意象同古人嘅心情。";
                                 const cantoneseDescText = spot.cantoneseDesc || firstSlide?.cantoneseDesc || poem.cantoneseDesc;
 
                                 return (
-                                    <div key={spot.id || idx} className="space-y-2 border-b border-[#c9a76b]/20 pb-5 last:border-0 last:pb-0">
-                                        {/* 詩句標題 */}
-                                        <div className="text-center bg-[#1c1914] py-1.5 px-3 rounded border border-[#c9a76b]/20">
+                                    <div key={spot.id || idx} className="bg-[#1c1914] rounded border border-[#c9a76b]/20 overflow-hidden shadow-sm">
+                                        <div className="bg-[#c9a76b]/10 py-2 px-3 border-b border-[#c9a76b]/20 text-center">
                                             <span className="text-[#c9a76b] text-xs font-bold tracking-widest leading-relaxed">
-                                                第 {idx + 1} 句<br/>「 {displayLabel} 」
+                                                「 {displayLabel} 」
                                             </span>
                                         </div>
-
-                                        {/* 廣東話講緊乜 */}
-                                        <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
-                                            <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                                <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
-                                            </p>
-                                            <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
-                                                {cantoneseLabelText}
-                                            </p>
-                                        </div>
-
-                                        {/* 意象睇頭 (存在時渲染) */}
-                                        {cantoneseDescText && (
-                                            <div className="bg-[#1c1914] p-3 rounded border border-[#c9a76b]/20">
+                                        <div className="p-3 space-y-3">
+                                            <div>
                                                 <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
-                                                    <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
+                                                    <i className="fa-solid fa-comment-dots" aria-label="廣東話講緊乜"></i> 廣東話講緊乜：
                                                 </p>
-                                                <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
-                                                    {cantoneseDescText}
+                                                <p className="text-gray-200 text-xs leading-relaxed tracking-wide">
+                                                    {cantoneseLabelText}
                                                 </p>
                                             </div>
-                                        )}
+                                            {cantoneseDescText && (
+                                                <>
+                                                    <div className="border-t border-dashed border-[#c9a76b]/20"></div>
+                                                    <div>
+                                                        <p className="text-[#c9a76b] font-bold text-[10px] tracking-wider mb-1 flex items-center gap-1">
+                                                            <i className="fa-solid fa-feather-pointed" aria-label="意象睇頭"></i> 意象睇頭：
+                                                        </p>
+                                                        <p className="text-gray-300 text-[11px] leading-relaxed tracking-wide">
+                                                            {cantoneseDescText}
+                                                        </p>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })
@@ -2902,19 +3225,52 @@ return (
                             {poem.author && <p className="text-xs text-gray-400 mt-1 tracking-widest">{poem.author}</p>}
                         </div>
 
-                        {/* 朗讀按鈕 */}
-                        {typeof readingPoem === 'function' && (
-                            <button
-                                type="button"
-                                onClick={() => readingPoem(poem)}
-                                className="flex items-center justify-center gap-2 w-full py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all"
-                            >
-                                <i className="fa-solid fa-volume-high"></i>
-                                朗讀篇章
-                            </button>
-                        )}
+                        {/* 🌟 優化版朗讀按鈕：整合 useSpeech Hook */}
+                        <div className="flex gap-2 w-full px-[5px]">
+                            {playbackState !== 'playing' ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        // 自動將陣列或字串組合並傳給 playSpeech
+                                        const rawText = Array.isArray(poem.fullText) 
+    ? poem.fullText.map(line => line.replace(/[「『]/g, '，').replace(/[」』]/g, '。')).join('，') 
+    : (poem.fullText || poem.content)
+        .replace(/[「『]/g, '，')
+        .replace(/[」』]/g, '。');
 
-                        {/* 全文呈現：支援陣列分段，並套用 Noto Serif TC */}
+// 朗讀內容加上標題
+playSpeech(`${poem.title}。${rawText}`);
+                                    }}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] text-xs font-bold tracking-[0.2em] hover:bg-[#c9a76b]/30 active:scale-95 transition-all"
+                                >
+                                    <i className="fa-solid fa-play"></i>
+                                    {playbackState === 'paused' ? '繼續朗讀' : '朗讀篇章'}
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={pauseSpeech}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 rounded border border-[#f5d38a] bg-[#f5d38a]/20 text-[#f5d38a] animate-pulse text-xs font-bold tracking-[0.2em] active:scale-95 transition-all"
+                                >
+                                    <i className="fa-solid fa-pause"></i>
+                                    暫停朗讀
+                                </button>
+                            )}
+                            
+                            {/* 停止按鈕 (只有在播放或暫停時出現) */}
+                            {playbackState !== 'stopped' && (
+                                <button
+                                    type="button"
+                                    onClick={stopSpeech}
+                                    className="w-10 flex items-center justify-center rounded border border-red-400/50 bg-red-400/10 text-red-400 hover:bg-red-400/20 active:scale-95 transition-all"
+                                    title="停止"
+                                >
+                                    <i className="fa-solid fa-stop text-sm"></i>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* 全文呈現 */}
                         <div 
                             className="w-full leading-relaxed text-[13px] tracking-[0.15em] text-[#e0d5ba] space-y-5 py-2 text-center"
                             style={{ fontFamily: "'Noto Serif TC', serif" }}
