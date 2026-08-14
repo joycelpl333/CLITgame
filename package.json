@@ -1,0 +1,23 @@
+{
+  "name": "hk-clit-game",
+  "version": "1.0.0",
+  "description": "詩境遊 - An immersive Chinese literature experience game",
+  "main": "poems.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joycelpl333/CLITgame.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joycelpl333/CLITgame/issues"
+  },
+  "homepage": "https://github.com/joycelpl333/CLITgame#readme",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
+  }
+}
