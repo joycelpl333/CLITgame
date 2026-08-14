@@ -17,6 +17,7 @@
 <link rel="preload" as="image" href="./startbtn.webp">
 <link rel="preload" as="image" href="./loading-icon.webp">
 <link rel="preload" as="image" href="./game.webp">
+<link rel="preload" as="image" href="assets/lamStamp.webp">
 
 <!-- 3. 預載本地腳本與音效 -->
 <link rel="preload" as="script" href="poems.js">
@@ -317,6 +318,7 @@ will-change: mask-image;
 <body>
     <div id="root"></div>
     <script src="poems.js"></script>
+    <script src="assets/config.js"></script>
     <div id="yt-player" style="position: absolute; left: -9999px; pointer-events: none;" tabIndex="-1" aria-hidden="true"></div>
     <script type="text/babel">
         const { useState, useEffect, useCallback, useRef } = React;
@@ -572,7 +574,8 @@ const checkYouTubeReady = () => {
             './start.webp',
             './startbtn.webp',
             './loading-icon.webp',
-            './game.webp'
+            './game.webp',
+            'assets/lamStamp.webp'
           ];
           imagesToPreload.forEach(src => {
             const img = new Image();
@@ -1568,6 +1571,7 @@ useEffect(() => {
             './game.webp',
             './loading.webp', 
             './loading-icon.webp',
+            'assets/lamStamp.webp',
             ...poemImages,
             ...sealImages
         ];
@@ -1792,6 +1796,9 @@ const infoFonts = getInfoFontClasses();
         </div>
     );
 
+// 鎖定篇章：讀取外部設定檔的數值，如果沒有讀取到，預設給一個足夠大的數字或 12 作為保底
+const maxAllowedLevels = window.GAME_CONFIG?.maxPlayableLevels || 7;
+
 // 🌟 1. 自動根據當前頁面與關卡取得動態背景圖片路徑
     const getCurrentBgImage = () => {
         if (currentPage === 'start') return './start.webp';
@@ -1857,7 +1864,14 @@ if (currentPage === 'start') {
             
             {/* 頂部 Header */}
             <header className="flex justify-between items-center py-2 px-5 border-b border-[#2d281f] relative z-10 bg-[#0d0c0a]/90 backdrop-blur-md">
-                <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1">詩境遊<span className="text-[10px] text-red-800 ml-1 font-bold">林</span></h1>
+                <h1 className="text-base font-bold text-[#c9a76b] tracking-[0.4em] font-medium py-1 flex items-center">
+    詩境遊
+    <img 
+        src="assets/lamStamp.webp" 
+        alt="林" 
+        className="w-[10px] h-[10px] mt-2 ml-1 object-contain" 
+    />
+</h1>
                 <div className="text-[10px] text-gray-500 tracking-widest uppercase">
                     {activeTab === 'game' ? '探索篇章' : 
                  activeTab === 'reading' ? '典藏閱讀' : 
@@ -1924,7 +1938,7 @@ if (currentPage === 'start') {
         </div>
     )}
 <main>
-                {/* 分頁一：探索篇章 */}
+{/* 分頁一：探索篇章 */}
                 {activeTab === 'game' && (
                     <div className="animate-fade-in">
                         <div className="shrink-0 mb-4">
@@ -1934,87 +1948,119 @@ if (currentPage === 'start') {
                         <h3 className="shrink-0 text-xs text-gray-400 mb-3 border-l-2 border-[#c9a76b] pl-2 tracking-widest uppercase">DSE 28篇指定篇章</h3>
                         
                         <div className="space-y-3.5 pb-10 fade-mask-list">
-    {POEMS.map((poem, idx) => {
-        const isUnlocked = unlockedPoems.includes(poem.id);
-        const isCompleted = completedPoems.includes(poem.id);
+    {/* 🌟 1. 讀取外部設定的開放關卡數，若無則預設全部開放 (POEMS.length) 或 12 */}
+    {(() => {
+        const maxAllowedLevels = window.GAME_CONFIG?.maxPlayableLevels || 12;
         
-        // 🌟 獨立定義是否為當前教學目標 (Home Step 5 且為第一個關卡)
-        const isTarget = tourState === 'home-step5' && idx === 0;
+        return POEMS.map((poem, idx) => {
+            const isUnlocked = unlockedPoems.includes(poem.id);
+            const isCompleted = completedPoems.includes(poem.id);
+            
+            // 🌟 2. 判斷系統是否開放此關卡，以及最終是否可遊玩
+            const isAllowedBySystem = idx < maxAllowedLevels;
+            const canPlay = isUnlocked && isAllowedBySystem;
+            
+            // 獨立定義是否為當前教學目標 (Home Step 5 且為第一個關卡)
+            const isTarget = tourState === 'home-step5' && idx === 0;
 
-        return (
-            <div 
-                key={poem.id} 
-                tabIndex={isUnlocked ? 0 : -1}
-                role="button"
-                aria-label={`關卡：${poem.title}，${isUnlocked ? '已解鎖' : '未解鎖'}`}
-                className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 
-                    ${isUnlocked ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm' : 'border-[#1a1714] bg-[#0c0a09] opacity-45'} 
-                    ${isTarget ? 'z-[70] ring-2 ring-[#c9a76b] pointer-events-auto bg-black shadow-[0_0_20px_#c9a76b] animate-pulse' : ''}
-                    ${tourState === 'home-step5' && !isTarget ? 'pointer-events-none opacity-30' : ''}
-                `}
-                onClick={() => {
-                    if (window.SM) SM.playSFX('click');
-                    
-                    // 🌟 嚴格控制點擊邏輯
-                    if (isTarget) {
-                        setTourState('game-tour'); // 切換到遊戲內教學模式
-                        if (typeof setHasSeenTutorial === 'function') {
-                            setHasSeenTutorial(true); 
+            return (
+                <div 
+                    key={poem.id} 
+                    tabIndex={canPlay ? 0 : -1}
+                    role="button"
+                    aria-label={`關卡：${poem.title}，${canPlay ? '可遊玩' : '未開放或未解鎖'}`}
+                    // 🌟 3. 將視覺樣式判定改為 canPlay，並加入 cursor 控制
+                    className={`relative flex items-center p-2.5 rounded-lg border clickable-hotspot transition-all duration-300 
+                        ${canPlay ? 'border-[#4a3f2b] bg-[#1a1712]/90 hover:bg-[#231e16] shadow-sm cursor-pointer' : 'border-[#1a1714] bg-[#0c0a09] opacity-45 cursor-not-allowed'} 
+                        ${isTarget ? 'z-[70] ring-2 ring-[#c9a76b] pointer-events-auto bg-black shadow-[0_0_20px_#c9a76b] animate-pulse' : ''}
+                        ${tourState === 'home-step5' && !isTarget ? 'pointer-events-none opacity-30' : ''}
+                    `}
+                    onClick={() => {
+                        // 🌟 4. 加入系統未開放的阻擋與提示邏輯
+                        if (!isAllowedBySystem) {
+                            if (isUnlocked) alert('後續關卡尚未開放，敬請期待！');
+                            return; // 直接中斷，不執行後續音效與跳轉
                         }
-                        openPoem(poem.id);
-                    } else if (tourState === 'idle' && isUnlocked) {
-                        // 只有在非教學狀態且已解鎖時，才允許點擊其他關卡
-                        openPoem(poem.id);
-                    }
-                }}
-                onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ' ') && isUnlocked) {
-                        e.preventDefault();
+
                         if (window.SM) SM.playSFX('click');
                         
+                        // 嚴格控制點擊邏輯
                         if (isTarget) {
-                            setTourState('game-tour');
-                            if (typeof setHasSeenTutorial === 'function') setHasSeenTutorial(true);
-                        }
-                        
-                        if (isTarget || tourState === 'idle') {
+                            setTourState('game-tour'); // 切換到遊戲內教學模式
+                            if (typeof setHasSeenTutorial === 'function') {
+                                setHasSeenTutorial(true); 
+                            }
+                            openPoem(poem.id);
+                        } else if (tourState === 'idle' && canPlay) {
+                            // 只有在非教學狀態且允許遊玩時，才允許點擊其他關卡
                             openPoem(poem.id);
                         }
-                    }
-                }}
-            >
-                {/* 左側縮圖 */}
-                <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
-                    <img 
-                        src={poem.bgImage || './loading.webp'} 
-                        alt={poem.title} 
-                        onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = './loading.webp';
-                        }}
-                        className={`w-full h-full object-cover ${isUnlocked ? 'opacity-70' : 'opacity-40 grayscale-[20%]'}`} 
-                    />
-                </div>
-                
-                {/* 中間文字 */}
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
-                        <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                    }}
+                    onKeyDown={(e) => {
+                        if ((e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            
+                            // 鍵盤操作同樣加入阻擋邏輯
+                            if (!isAllowedBySystem) {
+                                if (isUnlocked) alert('後續關卡尚未開放，敬請期待！');
+                                return;
+                            }
+
+                            if (canPlay) {
+                                if (window.SM) SM.playSFX('click');
+                                
+                                if (isTarget) {
+                                    setTourState('game-tour');
+                                    if (typeof setHasSeenTutorial === 'function') setHasSeenTutorial(true);
+                                }
+                                
+                                if (isTarget || tourState === 'idle') {
+                                    openPoem(poem.id);
+                                }
+                            }
+                        }
+                    }}
+                >
+                    {/* 左側縮圖 */}
+                    <div className="w-14 h-14 rounded-md bg-gray-900 overflow-hidden mr-3 shrink-0 relative border border-[#3a3224]/50 flex items-center justify-center text-xs text-gray-600 font-bold">
+                        <img 
+                            src={poem.bgImage || './loading.webp'} 
+                            alt={poem.title} 
+                            onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = './loading.webp';
+                            }}
+                            // 🌟 5. 縮圖的視覺判定改為 canPlay
+                            className={`w-full h-full object-cover ${canPlay ? 'opacity-70' : 'opacity-40 grayscale-[20%]'}`} 
+                        />
                     </div>
-                    {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
+                    
+                    {/* 中間文字 */}
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                            <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
+                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                            
+                            {/* 🌟 6. 可選：如果是因為系統限制而無法遊玩，顯示一個小標籤提示 */}
+                            {!isAllowedBySystem && (
+                                <span className="text-[9px] bg-red-900/50 text-red-200 px-1.5 py-0.5 rounded ml-1">未開放</span>
+                            )}
+                        </div>
+                        {isUnlocked && <div className={`${cardFonts.info} text-[#c9a76b] opacity-80 mt-1`}>意象探索: {poem.hotspots.length} 點</div>}
+                    </div>
+                    
+                    {/* 右側狀態 Icon */}
+                    <div className="px-2">
+                        {/* 🌟 7. 右側鎖頭與打勾 Icon 判定改為 canPlay */}
+                        {!canPlay ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
+                         isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
+                         <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
+                    </div>
                 </div>
-                
-                {/* 右側狀態 Icon */}
-                <div className="px-2">
-                    {!isUnlocked ? <i className="fa-solid fa-lock text-gray-600 text-sm"></i> : 
-                     isCompleted ? <i className="fa-solid fa-circle-check text-[#c9a76b] text-base"></i> :
-                     <i className="fa-solid fa-chevron-right text-[#c9a76b] text-sm"></i>}
-                </div>
-            </div>
-        );
-    })}
-</div>
+            );
+        });
+    })()}
+                        </div>
                     </div>
                 )}
 </main>
@@ -3531,7 +3577,7 @@ return (
         {/* 卡片標題區：詩句 */}
         <div className="bg-[#c9a76b]/10 py-2 px-3 border-b border-[#c9a76b]/20 text-center">
             <span className="text-xs text-[#c9a76b] font-bold tracking-widest leading-relaxed">
-                「 {currentSpot.label || poem.title} 」
+                 {currentSpot.label || poem.title} 
             </span>
         </div>
 
