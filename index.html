@@ -91,12 +91,22 @@ img {
     background-color: #c9a76b;
     color: #11100e;
 }
+
+html, body {
+    /* 禁用 iOS Safari 等瀏覽器的橡皮筋回彈與左右滑動歷史導覽 */
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    
+    /* 防止不必要的雙擊放大或預設觸控行為干擾遊戲 */
+    touch-action: pan-y; /* 如果遊戲內不需要上下滾動，甚至可以設為 none */
+}
+
         html, body, #root {
             height: 100dvh;
             margin: 0; padding: 0;
             background-color: #0d0c0a;
             color: #e0d5ba;
-            font-family: 'Noto Serif TC', serif;
+            font-family: 'Noto Serif TC', "PMingLiU", "MingLiU", "Songti TC", serif;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
@@ -598,13 +608,15 @@ const checkYouTubeReady = () => {
 async function preloadFonts() {
     if ('fonts' in document) {
         try {
+// 💡 關鍵修正：必須傳入需要預先渲染的具體文字，觸發 Google Fonts 下載對應的 unicode-range
+            const textToPreload = "詩境遊載入中開始探索篇章典藏閱讀雅士集章系統設置蒹葭下一步準備好";
             await Promise.all([
                 document.fonts.load('400 16px "Noto Serif TC"'),
                 document.fonts.load('500 16px "Noto Serif TC"'),
                 document.fonts.load('700 16px "Noto Serif TC"'),
                 document.fonts.load('900 16px "Noto Serif TC"')
             ]);
-            console.log('字體已在後台下載完畢');
+            console.log('關鍵字體與文字已在後台下載完畢');
         } catch (e) {
             console.warn('字體預載失敗:', e);
         }
@@ -1787,7 +1799,7 @@ const infoFonts = getInfoFontClasses();
 
     // 🌟 隱形 DOM 預熱容器（全域渲染，避免切換分頁時按鈕與印章變大/閃爍）
     const renderPreloadContainer = () => (
-        <div className="invisible fixed -left-[9999px] -top-[9999px] w-[375px] h-[667px] pointer-events-none aria-hidden">
+        <div className="opacity-0 fixed -left-[9999px] -top-[9999px] w-[375px] h-[667px] pointer-events-none aria-hidden">
             <div className="space-y-3.5">
                 {POEMS.map((poem) => (
                     <div key={`preload-read-${poem.id}`} className="relative flex items-center justify-between p-3.5 rounded-lg border border-[#4a3f2b] bg-[#1a1712]/90">
@@ -2138,7 +2150,7 @@ onKeyDown={(e) => {
                                         </div>
                                         <p className="text-[10px] text-gray-400 mb-4 leading-relaxed">
                                             完成篇章探索挑戰，即可獲得該篇之專屬古典篆印。<br/>
-                                            <span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 聯動獎勵：</span>集滿全部印章可兌換實體拓印明信片！
+                                            <span className="text-[#c9a76b]/80 mt-1 inline-block">🎁 聯動獎勵：</span>集滿全部印章可兌換（實體明信片）[暫無]！
                                         </p>
 
                                         <div className="grid grid-cols-3 gap-3">
