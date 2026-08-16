@@ -1240,6 +1240,82 @@ const {
         if (!readingPoem) stopSpeech();
     }, [readingPoem, stopSpeech]);
 
+// 新增狀態：記錄目前準備分享的印章 ID
+const [activeShareId, setActiveShareId] = useState(null);
+const handleShare = async (poem) => {
+    // 1. 組合專屬圖片的路徑 (統一使用 ./assets/...)
+    let imageUrl = poem.shareImageUrl || `./assets/shares/${poem.id}-share.webp`;
+    let isDefault = false;
+    let blob;
+
+    try {
+        // 2. 先嘗試去讀取這首詩的專屬分享圖
+        let response = await fetch(imageUrl);
+
+        // 如果找不到該專屬圖片 (例如 HTTP 狀態碼為 404)
+        if (!response.ok) {
+            const useDefault = window.confirm("此篇暫未有分享圖，是否要下載《詩境遊》的主視覺圖？");
+            
+            if (useDefault) {
+                // 用戶同意，將路徑換成主分享圖
+                isDefault = true;
+                imageUrl = "./assets/shares/poemtravel.png";
+                
+                // 再次去讀取主分享圖
+                response = await fetch(imageUrl);
+                
+                // 如果連主分享圖都找不到
+                if (!response.ok) throw new Error("主分享圖檔案也不存在");
+            } else {
+                return; // 用戶選擇取消，中斷執行
+            }
+        }
+
+        // 3. 成功讀取到圖片，將其轉為二進位 Blob
+        blob = await response.blob();
+        
+        // 取得正確的副檔名與 MIME type
+        const fileName = isDefault ? 'poemtravel.png' : `${poem.id}-share.webp`;
+        const file = new File([blob], fileName, { type: blob.type });
+
+        // 4. 呼叫手機原生分享
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            const shareTitle = isDefault ? "《詩境遊》" : `我在《詩境遊》解鎖了【${poem.title}】`;
+            const shareText = isDefault 
+                ? "探索中國古詩詞之美，來測試你的文學底蘊吧！" 
+                : `與你分享充滿意境的詩句\n一起來玩《詩境遊》吧！`;
+
+            await navigator.share({
+                title: shareTitle,
+                text: shareText,
+                files: [file]
+            });
+        } else {
+            // 5. 備用方案：電腦版改為直接下載
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            // 這裡依據是預設圖還是專屬圖，給予不同的下載檔名
+            link.download = isDefault ? `詩境遊_主視覺.png` : `詩境遊_${poem.title}專屬海報.webp`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            alert("已下載分享圖，您可以手動分享至社交媒體！");
+        }
+        
+    } catch (error) {
+        console.error("分享失敗:", error);
+        // 🌟 特別加入錯誤提示，提醒自己是不是用 file:// 開啟
+        if (window.location.protocol === 'file:') {
+            alert("本地直接開啟 HTML 無法讀取圖片，請使用 Live Server (http://localhost) 測試分享功能！");
+        } else {
+            alert("讀取分享圖片時發生錯誤，請檢查網路連線或圖片路徑。");
+        }
+    }
+};
+
 // 內部滾動處理函式（不會影響外層 game-frame）
 const scrollToSection = (sectionId) => {
     if (window.SM || typeof SM !== 'undefined') SM.playSFX('click');
@@ -2185,20 +2261,41 @@ onKeyDown={(e) => {
                                                 const filterId = `seal-spot-erosion-${idx}`;
 
                                                 return (
-                                                    <div 
-                                                        key={poem.id}
- /* 🌟 點擊印章時播放音效：解鎖播放 stamp，未解鎖播放 click */
-                            onClick={() => {
-                                if (window.SM || typeof SM !== 'undefined') {
-                                    SM.playSFX(isUnlocked ? 'stamp' : 'click');
-                                }
-                            }}
-                                                        className={`flex flex-col items-center justify-center p-3 rounded-lg border transition-colors duration-200 relative overflow-hidden ${
-                                                            isCompleted 
-                                                                ? 'bg-[#161310] border-[#3a3224] shadow-md group hover:border-[#c9a76b]/50' 
-                                                                : 'bg-[#100f0d]/40 border-[#1a1714] opacity-35'
-                                                        }`}
-                                                    >
+// 🌟 外部包一層相對定位容器，防止分享按鈕被 overflow-hidden 裁切 //
+        <div key={poem.id} className="relative flex flex-col items-center">
+{/* 🌟 分享按鈕彈窗 */}
+                        {activeShareId === poem.id && isCompleted && (
+                            <div className="absolute -top-10 z-50 w-full animate-fade-in-up flex justify-center">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleShare(poem); 
+                                        setActiveShareId(null); 
+                                    }}
+                                    className="w-[90%] bg-gradient-to-r from-[#c9a76b] to-[#e0d5ba] text-[#141210] py-1.5 rounded text-[11px] font-bold shadow-[0_4px_15px_rgba(201,167,107,0.4)] hover:brightness-110 transition-all flex items-center justify-center"
+                                >
+                                    <i className="fa-solid fa-share-nodes mr-1.5"></i> 雅賞
+                                </button>
+                                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-[#d3b680]"></div>
+                            </div>
+                        )}
+
+            <div 
+                onClick={() => {
+                    if (window.SM || typeof SM !== 'undefined') {
+                        SM.playSFX(isCompleted ? 'stamp' : 'click');
+                    }
+                    // 🌟 點擊已解鎖印章時，切換分享按鈕顯示
+                    if (isCompleted) {
+                        setActiveShareId(prev => prev === poem.id ? null : poem.id);
+                    }
+                }}
+                className={`w-full flex flex-col items-center justify-center p-3 rounded-lg border transition-colors duration-200 relative overflow-hidden cursor-pointer ${
+                    isCompleted 
+                        ? 'bg-[#161310] border-[#3a3224] shadow-md group hover:border-[#c9a76b]/50' 
+                        : 'bg-[#100f0d]/40 border-[#1a1714] opacity-35'
+                }`}
+            >
                                                         <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }} aria-hidden="true">
                                                             <defs>
                                                                 <filter id={filterId} x="-10%" y="-10%" width="120%" height="120%">
@@ -2321,7 +2418,7 @@ const topChar = poem.stampChar?.charAt(0) || stampName.replace('印', '').charAt
                                                                 </div>
                                                             )}
                                                         </div>
-
+            </div>
                                                         <div className="text-center mt-2 w-full">
                                                             <span className={`block text-[10px] font-medium tracking-wider truncate ${isCompleted ? 'text-[#e0d5ba]' : 'text-gray-600'}`}>
                                                                 {stampName}
@@ -2750,7 +2847,7 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
 {/* 🌟 資訊與 FAQ 彈窗 */}
 {showInfoModal && (
     <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in pointer-events-auto">
-        <div className="bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-xl w-full max-w-md h-[80vh] flex flex-col text-[#e0d5ba] shadow-[0_0_25px_rgba(201,167,107,0.2)] overflow-hidden">
+        <div className="bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-xl w-full max-w-md h-[80dvh] flex flex-col text-[#e0d5ba] shadow-[0_0_25px_rgba(201,167,107,0.2)] overflow-hidden">
             
             {/* 頂部 Header & 快速切換標籤 */}
             <div className="p-4 border-b border-[#2d281f] bg-[#11100e] flex flex-col gap-3 shrink-0">
@@ -3162,6 +3259,66 @@ return (
     const [isEntryGlowing, setIsEntryGlowing] = useState(true);
     const [readingPoem, setReadingPoem] = useState(null); 
     const { playbackState, playSpeech, pauseSpeech, stopSpeech } = useSpeech();
+    const playSfxSafe = (name) => {
+    if (typeof window !== 'undefined' && window.SM?.playSFX) {
+        window.SM.playSFX(name);
+        }
+    };
+
+// 用於控制是否顯示「確認離開」的自訂彈窗
+const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+useEffect(() => {
+    // 只要進入 GamePlayArea，就立刻推入一個假狀態作為「防護墊」
+    window.history.pushState({ isGameTrap: true }, '');
+
+    const handlePopState = (event) => {
+        // 攔截到實體返回鍵、手勢返回或瀏覽器上一頁
+        // 立即顯示自訂的確認視窗，阻斷原本的返回流程
+        setShowExitConfirm(true);
+        
+        // 關鍵動作：因為 popstate 觸發時假狀態已經被消耗，
+        // 必須立刻再補推一個假狀態進去，把玩家「安全地銬在」遊戲層
+        window.history.pushState({ isGameTrap: true }, '');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+        window.removeEventListener('popstate', handlePopState);
+        // 確保組件卸載時關閉彈窗
+        setShowExitConfirm(false);
+        stopSpeech();
+    };
+}, []); // 空陣列代表只在組件掛載時執行一次
+
+// 綁定給 UI 上的左上角返回按鈕
+const handleUiBackClick = () => {
+    if (window.SM) SM.playSFX('click');
+    setShowExitConfirm(true); 
+};
+
+// 玩家點擊「確認離開」
+const confirmExitGame = () => {
+    if (window.SM) {
+        SM.playSFX('click');
+        if (typeof SM.exitGameMode === 'function') SM.exitGameMode(); 
+    }
+    setShowExitConfirm(false);
+    
+    // 將歷史紀錄返回一步，清除掉我們剛才補償的假狀態，避免弄亂瀏覽器歷史
+    window.history.back(); 
+    
+    // 真正執行退出，呼叫父層傳入的 onBack
+    if (onBack) onBack(); 
+};
+
+// 玩家點擊「取消 / 繼續探索」
+const cancelExitGame = () => {
+    if (window.SM) SM.playSFX('click');
+    setShowExitConfirm(false);
+};
+
 // 當關閉閱讀 Modal 時，自動停止語音[cite: 4]
     useEffect(() => {
         if (!readingPoem) stopSpeech();
@@ -3189,6 +3346,9 @@ const modalRef = React.useRef(null);
     const handleHotspotClick = (index, e) => {
         e.stopPropagation();
         handleGlobalClick();
+
+       const [isProcessing, setIsProcessing] = useState(false);
+// 點擊成功時 setIsProcessing(true)，動畫完成切換下一關後再 setIsProcessing(false)
 
         const hotspot = poem.hotspots[index];
         const slidesData = hotspot?.slides || [
@@ -3381,7 +3541,7 @@ return (
             )}
             
             <div className="absolute top-0 left-0 w-full py-1 px-4 flex justify-between items-center pointer-events-none z-20 bg-black/40 backdrop-blur-[1px]">
-                <button onClick={onBack} className="pointer-events-auto p-1 clickable-hotspot" aria-label="返回" title="返回">
+                <button onClick={handleUiBackClick} className="pointer-events-auto p-1 clickable-hotspot" aria-label="返回" title="返回">
                     <i className="fa-solid fa-chevron-left text-[#c9a76b] text-base"></i>
                 </button>
 
@@ -3900,12 +4060,22 @@ return (
                                     恭喜完成《<span className="text-[#c9a76b]">{poem.title}</span>》<br/>意象探索與詩境解鎖
                                 </p>
 
-                                <button 
-                                    onClick={onComplete} aria-label="返回"
-                                    className="w-full py-2.5 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] hover:bg-[#c9a76b]/30 active:scale-95 transition-all text-xs tracking-[0.2em] font-bold shadow-md clickable-hotspot"
-                                >
-                                    返回主頁
-                                </button>
+                                <div className="flex gap-4 w-full mt-8">
+    <button 
+        onClick={() => {
+            // 返回主頁邏輯
+        }}
+        className="flex-1 py-3 px-4 border border-[#c9a76b]/50 text-[#c9a76b] rounded hover:bg-[#c9a76b]/10 transition-colors tracking-widest text-sm"
+    >
+        歸隱
+    </button>
+    <button 
+        onClick={() => handleShare(POEMS.find(p => p.id === currentLevel))}
+        className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-sm font-bold flex justify-center items-center"
+    >
+        <i className="fa-solid fa-feather-pointed mr-2"></i> 分享雅趣
+    </button>
+</div>
                             </div>
                         </div>
                     )}
@@ -4001,6 +4171,52 @@ aria-label={audioSettings.sfx ? "關閉環境音效" : "開啟環境音效"}
         </div>
     </div>
 )}
+
+{/* 假狀態防護網觸發時的確認視窗 (退出遊戲確認) */}
+{showExitConfirm && (
+    <div className="absolute inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fade-in pointer-events-auto">
+        <div 
+            className="relative w-full max-w-[280px] bg-[#14120e] border-2 border-[#c9a76b]/70 rounded-lg p-6 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,0,0,0.9),0_0_15px_rgba(201,167,107,0.2)]"
+            role="dialog"
+            aria-modal="true"
+        >
+            {/* 古典邊框裝飾 */}
+            <div className="absolute inset-1 border border-[#c9a76b]/25 rounded pointer-events-none"></div>
+            <div className="absolute top-2 left-2 w-2 h-2 border-t-2 border-l-2 border-[#c9a76b]"></div>
+            <div className="absolute top-2 right-2 w-2 h-2 border-t-2 border-r-2 border-[#c9a76b]"></div>
+            <div className="absolute bottom-2 left-2 w-2 h-2 border-b-2 border-l-2 border-[#c9a76b]"></div>
+            <div className="absolute bottom-2 right-2 w-2 h-2 border-b-2 border-r-2 border-[#c9a76b]"></div>
+
+            {/* 圖示 */}
+            <div className="w-12 h-12 rounded-full border border-[#c9a76b] flex items-center justify-center mb-4 bg-[#c9a76b]/10">
+                <i className="fa-solid fa-person-walking-arrow-right text-[#c9a76b] text-xl"></i>
+            </div>
+
+            <h2 className="text-base text-[#e0d5ba] tracking-[0.2em] font-bold mb-2">確認離開詩境？</h2>
+            <div className="w-12 h-[1px] bg-[#c9a76b]/40 my-2"></div>
+            
+            <p className="text-gray-400 text-xs mb-6 tracking-wider leading-relaxed">
+                現在離開，<br/>當前的探索進度將不會保留。
+            </p>
+
+            <div className="flex gap-3 w-full">
+                <button 
+                    onClick={cancelExitGame}
+                    className="flex-1 py-2 rounded border border-[#c9a76b] bg-[#c9a76b]/15 text-[#e0d5ba] hover:bg-[#c9a76b]/30 active:scale-95 transition-all text-xs tracking-[0.2em] font-bold clickable-hotspot"
+                >
+                    繼續探索
+                </button>
+                <button 
+                    onClick={confirmExitGame}
+                    className="flex-1 py-2 rounded border border-[#5c4f3d] bg-transparent text-gray-400 hover:text-[#e0d5ba] hover:border-[#c9a76b] active:scale-95 transition-all text-xs tracking-[0.2em] font-bold clickable-hotspot"
+                >
+                    確認離開
+                </button>
+            </div>
+        </div>
+    </div>
+)}
+
 </div> 
     );
 }
