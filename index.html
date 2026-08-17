@@ -3213,24 +3213,35 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
             }
 
             if (currentPage === 'game') {
-                const poem = POEMS.find(p => p.id === currentPoemId);
-                return <GamePlayArea poem={poem} onBack={() => {
-                  if (window.SM || typeof SM !== 'undefined') 
-                  SM.exitGameMode(); 
-                  setCurrentPage('home'); currentLevel={currentLevel}
-    handleShare={handleShare}
-    onBack={handleBackToMain}
-              }} onComplete={() => handlePoemComplete(currentPoemId)} cardFonts={cardFonts} triggerToast={triggerToast}
-// 🌟 傳入設置參數以實現跨頁面同步
+    const poem = POEMS.find(p => p.id === currentPoemId);
+    
+    return (
+        <GamePlayArea 
+            poem={poem} 
+            currentLevel={currentPoemId}  
+            handleShare={handleShare}
+            onBack={() => {
+                if (window.SM || typeof SM !== 'undefined') {
+                    SM.exitGameMode(); 
+                }
+                setCurrentPage('home'); 
+                // 若你有特定的 handleBackToMain 函數，也可以在這裡呼叫：
+                // handleBackToMain();
+            }} 
+            onComplete={() => handlePoemComplete(currentPoemId)} 
+            cardFonts={cardFonts} 
+            triggerToast={triggerToast}
+            // 🌟 傳入設置參數以實現跨頁面同步
             audioSettings={audioSettings}
             setAudioSettings={setAudioSettings}
             fontSize={fontSize}
             setFontSize={setFontSize}
-tourState={tourState} 
-    setTourState={setTourState}
- />;
-            }
-            return null;
+            tourState={tourState} 
+            setTourState={setTourState}
+        />
+    );
+}
+return null;
         };
 return (
     <div className="viewport-container" onClick={unlockAudioContext}>
@@ -4074,21 +4085,18 @@ return (
         返回主頁
     </button>
     <button 
-            onClick={() => {
-                if (typeof playSfxSafe === 'function') playSfxSafe('click');
-                
-                // 透過傳進來的 POEMS 與 currentLevel 找到當前詩詞
-                const currentPoem = POEMS.find(p => p.id == currentLevel);
-                
-                // 呼叫從父層傳進來的 handleShare
-                if (typeof handleShare === 'function') {
-                    handleShare(currentPoem);
-                } else {
-                    alert("分享功能尚未就緒");
-                }
-            }}
-            className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-xs font-bold flex justify-center items-center pointer-events-auto"
-        >
+    onClick={() => {
+        if (typeof playSfxSafe === 'function') playSfxSafe('click');
+        
+        // 直接使用傳進來的 handleShare 與 poem prop
+        if (typeof handleShare === 'function') {
+            handleShare(poem); // 直接代入上方傳來的 poem
+        } else {
+            alert("分享功能尚未就緒");
+        }
+    }}
+    className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-xs font-bold flex justify-center items-center pointer-events-auto"
+>
     分享雅趣
 </button>
 </div>
