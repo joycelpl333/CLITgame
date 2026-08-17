@@ -4084,21 +4084,6 @@ return (
     >
         返回主頁
     </button>
-    <button 
-    onClick={() => {
-        if (typeof playSfxSafe === 'function') playSfxSafe('click');
-        
-        // 直接使用傳進來的 handleShare 與 poem prop
-        if (typeof handleShare === 'function') {
-            handleShare(poem); // 直接代入上方傳來的 poem
-        } else {
-            alert("分享功能尚未就緒");
-        }
-    }}
-    className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-xs font-bold flex justify-center items-center pointer-events-auto"
->
-    分享雅趣
-</button>
 </div>
                             </div>
                         </div>
