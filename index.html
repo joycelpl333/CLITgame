@@ -3217,7 +3217,9 @@ aria-pressed={audioSettings.sfx} aria-label="環境音效開關"
                 return <GamePlayArea poem={poem} onBack={() => {
                   if (window.SM || typeof SM !== 'undefined') 
                   SM.exitGameMode(); 
-                  setCurrentPage('home'); 
+                  setCurrentPage('home'); currentLevel={currentLevel}
+    handleShare={handleShare}
+    onBack={handleBackToMain}
               }} onComplete={() => handlePoemComplete(currentPoemId)} cardFonts={cardFonts} triggerToast={triggerToast}
 // 🌟 傳入設置參數以實現跨頁面同步
             audioSettings={audioSettings}
@@ -3249,7 +3251,7 @@ return (
 );
     }
 
-        function GamePlayArea({ poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound, audioSettings, setAudioSettings, fontSize, setFontSize, soundEnabled, tourState, setTourState }) {
+        function GamePlayArea({ currentLevel, handleShare, poem, onBack, onComplete, triggerToast, isMuted = false, onToggleSound, audioSettings, setAudioSettings, fontSize, setFontSize, soundEnabled, tourState, setTourState }) {
     const [currentStep, setCurrentStep] = useState(0);
     const [mistakes, setMistakes] = useState({}); 
     const [isShaking, setIsShaking] = useState(false);
@@ -4072,18 +4074,23 @@ return (
         返回主頁
     </button>
     <button 
-    onClick={() => {
-        // 加入音效提升回饋感 (確保有 playSfxSafe 函式)
-        if (typeof playSfxSafe === 'function') playSfxSafe('click');
-        
-        // 🌟 改用 == 來避免字串與數字的型別差異導致找不到資料
-        const currentPoem = POEMS.find(p => p.id == currentLevel);
-        handleShare(currentPoem);
-    }}
-    className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-xs font-bold flex justify-center items-center pointer-events-auto"
-    >
-        分享雅趣
-    </button>
+            onClick={() => {
+                if (typeof playSfxSafe === 'function') playSfxSafe('click');
+                
+                // 透過傳進來的 POEMS 與 currentLevel 找到當前詩詞
+                const currentPoem = POEMS.find(p => p.id == currentLevel);
+                
+                // 呼叫從父層傳進來的 handleShare
+                if (typeof handleShare === 'function') {
+                    handleShare(currentPoem);
+                } else {
+                    alert("分享功能尚未就緒");
+                }
+            }}
+            className="flex-1 py-3 px-4 bg-gradient-to-r from-[#c9a76b] to-[#b38f56] text-[#141210] rounded hover:brightness-110 shadow-[0_0_15px_rgba(201,167,107,0.3)] transition-colors tracking-widest text-xs font-bold flex justify-center items-center pointer-events-auto"
+        >
+    分享雅趣
+</button>
 </div>
                             </div>
                         </div>
