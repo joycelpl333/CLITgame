@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>詩境遊 - 沉浸式文學體驗</title>
-
+<link rel="icon" href="assets/favicon.webp" type="image/webp">
 <!-- 1. 預先建立 CDN 伺服器連線 (放在最頂端) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2263,19 +2263,19 @@ onKeyDown={(e) => {
                                                 const currentRotate = rotations[idx % rotations.length];
                                                 const filterId = `seal-spot-erosion-${idx}`;
 
-                                                return (
-// 🌟 外部包一層相對定位容器，防止分享按鈕被 overflow-hidden 裁切 //
-        <div key={poem.id} className="relative flex flex-col items-center">
-{/* 🌟 分享按鈕彈窗 */}
-                        {activeShareId === poem.id && isCompleted && (
-                            <div className="absolute -top-6 z-50 w-full animate-fade-in-up flex justify-center">
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleShare(poem); 
-                                        setActiveShareId(null); 
-                                    }}
-                                    // 呈現書籤質感的上下金邊、深色漸層
+                                               return (
+    // 🌟 外部包一層相對定位容器，防止分享按鈕被 overflow-hidden 裁切
+    <div key={poem.id} className="relative flex flex-col items-center">
+        {/* 🌟 分享按鈕彈窗 (方案二：古韻錦籤) */}
+        {activeShareId === poem.id && isCompleted && (
+            <div className="absolute -top-6 z-50 w-full animate-fade-in-up flex justify-center">
+                <button 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleShare(poem); 
+                        setActiveShareId(null); 
+                    }}
+                    // 呈現書籤質感的上下金邊、深色漸層
                     className="w-[88%] py-1.5 px-2 rounded-lg bg-gradient-to-r from-[#1c1712]/50 via-[#3a3024]/60 to-[#1c1712]/50 border-y border-[#c9a76b]/70 text-[#c9a76b] text-[11px] font-bold shadow-[0_4px_12px_rgba(0,0,0,0.8)] hover:brightness-125 hover:shadow-[0_0_15px_rgba(201,167,107,0.5)] transition-all duration-300 flex items-center justify-center gap-2 relative overflow-hidden group"
                 >
                     {/* 兩側古典菱形點綴，懸浮時微放大 */}
@@ -2312,7 +2312,7 @@ onKeyDown={(e) => {
                 </defs>
             </svg>
 
-                                                        <div className={`relative w-12 h-12 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isCompleted ? 'scale-100 group-hover:scale-105' : 'scale-90'}`}>
+            <div className={`relative w-12 h-12 flex items-center justify-center transition-transform duration-300 ${currentRotate} ${isCompleted ? 'scale-100 group-hover:scale-105' : 'scale-90'}`}>
                                                             {showStamp ? (
                                                                 poem.sealImgUrl ? (
                                                                     <img 
