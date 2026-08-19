@@ -2149,7 +2149,7 @@ if (currentPage === 'start') {
                     <div className="flex-1">
                         <div className="flex items-center gap-2">
                             <h4 className={`${cardFonts.title} text-[#e0d5ba] tracking-wider font-bold`}>{poem.title}</h4>
-                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>— {poem.author}</span>
+                            <span className={`${cardFonts.author} text-[#c9a76b]/70 font-light`}>{poem.author}</span>
                             
                             {/* 🌟 6. 可選：如果是因為系統限制而無法遊玩，顯示一個小標籤提示 */}
                             {!isAllowedBySystem && (
